@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<!--
+Aruba Configuration Analysis Tool
+Author: Lucas.Mei
+-->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="title">配置分析结果</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/merge/merge.min.css">
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/editor/editor.main.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .ap-group {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .profile-type {
+            margin: 20px 0;
+        }
+        .profile {
+            margin: 10px 0 10px 30px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+        .command {
+            margin-left: 25px;
+            color: #666;
+            font-family: monospace;
+            font-size: 0.9em;
+            padding: 2px 0;
+        }
+        .profile-name {
+            color: #2c3e50;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .profile-name::before {
+            display: none;
+        }
+        .profile-content {
+            transition: max-height 0.3s ease-out;
+            max-height: 3000px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f5f5f5;
+        }
+        .profile-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .profile-content::-webkit-scrollbar-track {
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .profile-content::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .profile-content::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .profile-content.collapsed {
+            max-height: 0;
+        }
+        .profile-type-name {
+            color: #16a085;
+            font-size: 1.2em;
+            font-weight: bold;
+            padding-left: 0;
+            border-left: none;
+            margin-bottom: 10px;
+        }
+        .ap-group-name {
+            color: #16a085;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            padding-left: 0;
+            border-left: none;
+        }
+        .ap-group-name::before {
+            content: '▼';
+            display: inline-block;
+            margin-right: 5px;
+            transition: transform 0.2s;
+        }
+        .ap-group-name.collapsed::before {
+            transform: rotate(-90deg);
+        }
+        .ap-group-content {
+            transition: max-height 0.3s ease-out;
+            max-height: 5000px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f5f5f5;
+        }
+        .ap-group-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .ap-group-content::-webkit-scrollbar-track {
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .ap-group-content::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .ap-group-content::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .ap-group-content.collapsed {
+            max-height: 0;
+        }
+        .sub-profile {
+            margin: 8px 0 8px 25px;
+        }
+        .sub-profile[data-type^="level-4"] .toggle-icon,
+        .sub-profile[data-type^="level-5"] .toggle-icon {
+            display: none;
+        }
+        .level-4 .profile-name .toggle-icon,
+        .level-5 .profile-name .toggle-icon {
+            display: none;
+        }
+        .level-4,
+        .level-5 {
+            margin-left: 15px;
+        }
+        .profile-name[data-type] .toggle-icon {
+            display: none;
+        }
+        .diff-viewer {
+            margin-top: 40px;
+            padding: 20px;
+            border-top: 2px solid #ddd;
+        }
+        .diff-viewer h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .CodeMirror-merge {
+            border: 1px solid #ddd;
+            height: 600px !important;
+        }
+        .CodeMirror-merge-pane {
+            height: 100%;
+        }
+        .CodeMirror {
+            height: 100%;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        #monaco-diff-editor {
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .editor-titles {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 0 10px;
+        }
+        .title-section {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+        .editor-title {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        .search-btn {
+            padding: 5px 15px;
+            background-color: #16a085;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .search-btn:hover {
+            background-color: #138a72;
+        }
+        .ai-analysis {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+        }
+        
+        .analysis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .analysis-header h3 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 16px;
+        }
+        
+        .status-badge {
+            background-color: #17a2b8;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        
+        .analysis-content {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .analysis-placeholder {
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 4px;
+            border: 1px dashed #dee2e6;
+        }
+        .analysis-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .analysis-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border-left: 4px solid transparent;
+        }
+        .analysis-item.warning {
+            background-color: #fff3cd;
+            border-left-color: #ffc107;
+            color: #856404;
+        }
+        .profile-title {
+            display: flex;
+            align-items: center;
+        }
+        .toggle-icon {
+            display: inline-block;
+            margin-right: 5px;
+            user-select: none;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+        .profile > .profile-name {
+            color: #2980b9;
+            font-size: 1.1em;
+            padding-left: 0;
+            border-left: none;
+            margin: 5px 0;
+        }
+        .sub-profile > .profile-name {
+            color: #8e44ad;
+            font-size: 1em;
+            padding-left: 0;
+            border-left: none;
+        }
+        .sub-profile .sub-profile > .profile-name {
+            color: #c0392b;
+            font-size: 0.95em;
+            padding-left: 0;
+            border-left: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/merge/merge.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <script>var require = { paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs' } };</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/loader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/editor/editor.main.nls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/editor/editor.main.js"></script>
+    <script>
+        function toggleProfile(element) {
+            const content = element.nextElementSibling;
+            element.classList.toggle('collapsed');
+            content.classList.toggle('collapsed');
+        }
+
+        // 语言配置
+        const i18n = {
+            'zh': {
+                'title': '配置分析结果',
+                'page_title': 'Aruba AC配置分析结果',
+                'other_config': '其他配置：',
+                'diff_title': '配置差异比较',
+                'ai_title': 'AI 智能提示',
+                'no_issues': '未发现配置问题',
+                'uploaded_content': '上传内容',
+                'default_config': '默认配置',
+                'search_left': '搜索左侧内容',
+                'search_right': '搜索右侧内容'
+            },
+            'en': {
+                'title': 'Configuration Analysis Result',
+                'page_title': 'Aruba AC Configuration Analysis Result',
+                'other_config': 'Other Configurations:',
+                'diff_title': 'Configuration Comparison',
+                'ai_title': 'AI Smart Tips',
+                'no_issues': 'No configuration issues found',
+                'uploaded_content': 'Uploaded Content',
+                'default_config': 'Default Configuration',
+                'search_left': 'Search Left Content',
+                'search_right': 'Search Right Content'
+            }
+        };
+
+        // 获取浏览器语言
+        function getBrowserLanguage() {
+            const lang = navigator.language || navigator.userLanguage;
+            return lang.startsWith('zh') ? 'zh' : 'en';
+        }
+
+        // 应用语言
+        function applyLanguage() {
+            const lang = getBrowserLanguage();
+            const texts = i18n[lang];
+
+            // 更新所有带data-i18n属性的元素
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (texts[key]) {
+                    element.textContent = texts[key];
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 应用语言
+            applyLanguage();
+            
+            // Monaco编辑器初始化代码
+            require(['vs/editor/editor.main'], function() {
+                var diffEditor = monaco.editor.createDiffEditor(document.getElementById('monaco-diff-editor'), {
+                    automaticLayout: true,
+                    originalEditable: false,
+                    readOnly: true,
+                    renderSideBySide: true,
+                    fontSize: 13,
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    minimap: { enabled: false },
+                    folding: true,
+                    theme: 'vs-light',
+                    diffWordWrap: 'on'
+                });
+
+                diffEditor.setModel({
+                    original: monaco.editor.createModel({{ uploaded_content|tojson|safe }}, 'plaintext'),
+                    modified: monaco.editor.createModel({{ default_content|tojson|safe }}, 'plaintext')
+                });
+
+                var container = document.getElementById('monaco-diff-editor');
+                var titles = document.createElement('div');
+                titles.className = 'editor-titles';
+                titles.innerHTML = `
+                    <div class="title-section">
+                        <div class="editor-title" data-i18n="uploaded_content">上传内容</div>
+                        <button class="search-btn" onclick="triggerSearch('left')" data-i18n="search_left">搜索左侧内容</button>
+                    </div>
+                    <div class="title-section">
+                        <div class="editor-title" data-i18n="default_config">默认配置</div>
+                        <button class="search-btn" onclick="triggerSearch('right')" data-i18n="search_right">搜索右侧内容</button>
+                    </div>
+                `;
+                container.parentNode.insertBefore(titles, container);
+
+                // 保存编辑器实例供搜索功能使用
+                window.diffEditor = diffEditor;
+                
+                // 重新应用语言（因为动态添加了新元素）
+                applyLanguage();
+            });
+        });
+
+        // 触发搜索功能
+        function triggerSearch(side) {
+            if (!window.diffEditor) return;
+            
+            const editor = side === 'left' 
+                ? window.diffEditor.getOriginalEditor() 
+                : window.diffEditor.getModifiedEditor();
+            
+            editor.trigger('', 'actions.find', null);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h2 data-i18n="page_title">Aruba AC配置分析结果</h2>
+        {% for ap_group, data in config.items() %}
+        <div class="ap-group">
+            <div class="ap-group-name collapsed" onclick="toggleProfile(this)">AP Group: {{ ap_group }}</div>
+            <div class="ap-group-content collapsed">
+                {% set shown_types = {} %}
+                {% for profile_info in data.profile_order %}
+                    {% if profile_info.type not in shown_types %}
+                        {% if shown_types|length > 0 %}
+                            </div>
+                        {% endif %}
+                        <div class="profile-type">
+                            <div class="profile-type-name">{{ profile_info.type }}</div>
+                        {% set _ = shown_types.update({profile_info.type: []}) %}
+                    {% endif %}
+                    {% set profile_data = data.profiles[profile_info.type][profile_info.name] %}
+                    <div class="profile">
+                        <div class="profile-name collapsed" onclick="toggleProfile(this)">
+                            <span class="toggle-icon">▼</span>
+                            <span class="profile-text">{{ profile_info.name }}</span>
+                        </div>
+                        <div class="profile-content collapsed">
+                            {% if profile_info.type == 'virtual-ap' %}
+                                {% for command in profile_data.commands %}
+                                    {% if loop.index0 in profile_data.command_associations %}
+                                        {% set association = profile_data.command_associations[loop.index0] %}
+                                        {% if association.type == 'ssid_profile' %}
+                                        <div class="sub-profile">
+                                            <div class="profile-name collapsed" onclick="toggleProfile(this)" data-type="ssid_profile">
+                                                <span class="toggle-icon">▼</span>
+                                                <span class="profile-text">ssid-profile {{ association.name }}</span>
+                                            </div>
+                                            <div class="profile-content collapsed">
+                                                {% for cmd in association.commands %}
+                                                <div class="command level-3">{{ cmd }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if association.type == 'dot11k_profile' %}
+                                        <div class="sub-profile">
+                                            <div class="profile-name collapsed" onclick="toggleProfile(this)" data-type="dot11k_profile">
+                                                <span class="toggle-icon">▼</span>
+                                                <span class="profile-text">dot11k-profile {{ association.name }}</span>
+                                            </div>
+                                            <div class="profile-content collapsed">
+                                                {% for cmd in association.commands %}
+                                                <div class="command level-3">{{ cmd }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if association.type == 'aaa_profile' %}
+                                        <div class="sub-profile">
+                                            <div class="profile-name collapsed" onclick="toggleProfile(this)" data-type="aaa_profile">
+                                                <span class="toggle-icon">▼</span>
+                                                <span class="profile-text">aaa-profile {{ association.config.name }}</span>
+                                            </div>
+                                            <div class="profile-content collapsed">
+                                                {% for aaa_cmd in association.config.commands %}
+                                                {% if loop.index0 not in association.config.associations %}
+                                                <div style="margin-left: 8px;">
+                                                    <div class="command level-4">{{ aaa_cmd }}</div>
+                                                </div>
+                                                {% else %}
+                                                    {% set aaa_association = association.config.associations[loop.index0] %}
+                                                    <div class="sub-profile">
+                                                        <div class="profile-name collapsed" onclick="toggleProfile(this)" data-type="{{ aaa_association.type }}">
+                                                            <span class="toggle-icon">▼</span>
+                                                            <span class="profile-text">{{ aaa_association.type|replace('_', '-') }} {{ aaa_association.name }}</span>
+                                                        </div>
+                                                        <div class="profile-content collapsed">
+                                                            {% for cmd in aaa_association.commands %}
+                                                            <div class="command level-5">{{ cmd }}</div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    </div>
+                                                {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="command level-3">{{ command }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% elif profile_info.type == 'dot11a-radio-profile' or profile_info.type == 'dot11g-radio-profile' %}
+                                {% for command in profile_data.commands %}
+                                    {% if loop.index0 in profile_data.command_associations %}
+                                        {% set association = profile_data.command_associations[loop.index0] %}
+                                        {% if association.type == 'arm_profile' %}
+                                        <div class="sub-profile">
+                                            <div class="profile-name collapsed" onclick="toggleProfile(this)" data-type="arm_profile">
+                                                <span class="toggle-icon">▼</span>
+                                                <span class="profile-text">arm-profile {{ association.name }}</span>
+                                            </div>
+                                            <div class="profile-content collapsed">
+                                                {% for cmd in association.commands %}
+                                                <div class="command level-3">{{ cmd }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="command level-3">{{ command }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                {% for command in profile_data.commands %}
+                                <div class="command level-3">{{ command }}</div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+                {% if shown_types|length > 0 %}
+                    </div>
+                {% endif %}
+
+                {% if data.commands %}
+                <div class="profile-type">
+                    <div class="profile-type-name" data-i18n="other_config">其他配置：</div>
+                    {% for command in data.commands %}
+                    <div class="command level-3">{{ command }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="diff-viewer">
+        <h2 data-i18n="diff_title">配置差异比较</h2>
+        <div class="ai-analysis">
+            <div class="analysis-header">
+                <h3 data-i18n="ai_title">AI 智能提示</h3>
+                <div class="analysis-status">
+                    <span class="status-badge">Beta</span>
+                </div>
+            </div>
+            <div class="analysis-content">
+                {% if analysis_results %}
+                    <ul class="analysis-list">
+                        {% for result in analysis_results %}
+                        <li class="analysis-item {{ result.type }}">
+                            {{ result.message }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="analysis-placeholder" data-i18n="no_issues">
+                        未发现配置问题
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div id="monaco-diff-editor"></div>
+    </div>
+</body>
+</html> 

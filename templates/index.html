@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<!--
+Aruba Configuration Analysis Tool
+Author: Lucas.Mei
+-->
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="title">Aruba配置分析工具</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-section, .paste-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .section-title {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        .submit-btn {
+            background-color: #16a085;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .submit-btn:hover {
+            background-color: #138a72;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .or-divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+        }
+        .counter {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+        }
+        .counter {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .tips {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+        }
+        .tip-text {
+            color: #856404;
+            margin: 0;
+            font-size: 1em;
+        }
+    </style>
+    <script>
+        function validateFileSize(input) {
+            if (input.files && input.files[0]) {
+                if (input.files[0].size > 1024 * 1024) {  // 1MB = 1024 * 1024 bytes
+                    alert('File size cannot exceed 1MB');
+                    input.value = '';  // Clear selection
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // 语言配置
+        const i18n = {
+            'zh': {
+                'title': 'Aruba配置分析工具',
+                'tool_tip': '提示：使用MD上的配置，获取配置前请先输入 "no paging" 命令，再使用 "show running" 获取配置。show running结果可以文本文件方式上传，也可以直接粘贴',
+                'upload_title': '上传配置文件',
+                'file_hint': '支持所有文本文件，最大1MB',
+                'upload_btn': '上传并分析',
+                'paste_title': '粘贴配置内容',
+                'paste_placeholder': '在此粘贴配置内容...',
+                'analyze_btn': '分析配置',
+                'counter_text': '文件处理次数：'
+            },
+            'en': {
+                'title': 'Aruba Configuration Analysis Tool',
+                'tool_tip': 'Note: For MD configuration, please enter "no paging" command first, then use "show running" to get the configuration. The show running result can be uploaded as a text file or pasted directly',
+                'upload_title': 'Upload Configuration File',
+                'file_hint': 'Supports all text files, max size 1MB',
+                'upload_btn': 'Upload and Analyze',
+                'paste_title': 'Paste Configuration Content',
+                'paste_placeholder': 'Paste your configuration content here...',
+                'analyze_btn': 'Analyze Configuration',
+                'counter_text': 'File processing times: '
+            }
+        };
+
+        // 获取浏览器语言
+        function getBrowserLanguage() {
+            const lang = navigator.language || navigator.userLanguage;
+            return lang.startsWith('zh') ? 'zh' : 'en';
+        }
+
+        // 应用语言
+        function applyLanguage() {
+            const lang = getBrowserLanguage();
+            const texts = i18n[lang];
+
+            // 更新所有带data-i18n属性的元素
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (texts[key]) {
+                    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                        element.placeholder = texts[key];
+                    } else {
+                        element.textContent = texts[key];
+                    }
+                }
+            });
+        }
+
+        // 页面加载完成后应用语言
+        document.addEventListener('DOMContentLoaded', applyLanguage);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1 data-i18n="title">Aruba配置分析工具</h1>
+        <div class="tips">
+            <p class="tip-text" data-i18n="tool_tip">提示：使用MD上的配置，获取配置前请先输入 "no paging" 命令，再使用 "show running" 获取配置。show running结果可以文本文件方式上传，也可以直接粘贴</p>
+        </div>
+        <div class="upload-section">
+            <h2 data-i18n="upload_title">上传配置文件</h2>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <input type="file" name="config_file" onchange="validateFileSize(this)">
+                <div class="file-hint" data-i18n="file_hint">支持所有文本文件，最大1MB</div>
+                <button type="submit" class="submit-btn" data-i18n="upload_btn">上传并分析</button>
+            </form>
+        </div>
+
+        <div class="or-divider">- OR -</div>
+
+        <div class="paste-section">
+            <h2 data-i18n="paste_title">粘贴配置内容</h2>
+            <form action="/upload" method="post">
+                <textarea name="config_text" data-i18n="paste_placeholder" placeholder="在此粘贴配置内容..."></textarea>
+                <button type="submit" class="submit-btn" data-i18n="analyze_btn">分析配置</button>
+            </form>
+        </div>
+
+        <div class="counter">
+            <span data-i18n="counter_text">文件处理次数：</span>{{ counter }}
+        </div>
+    </div>
+</body>
+</html> 

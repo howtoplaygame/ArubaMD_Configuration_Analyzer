@@ -1,0 +1,44 @@
+{% macro render_config(config_dict) %}
+    <ul class="config-item">
+    {% for ap_group, profiles in config_dict.items() %}
+        <li>
+            <strong>AP Group: {{ ap_group }}</strong>
+            <ul>
+                <li>
+                    Virtual-AP配置:
+                    <ul>
+                        {% for vap_name, vap_config in profiles['virtual-ap'].items() %}
+                            <li>
+                                <strong>{{ vap_name }}</strong>
+                                {% if vap_config %}
+                                    <ul>
+                                        {% for config_line in vap_config %}
+                                            <li>{{ config_line }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </li>
+                {% for profile_type, profile_list in profiles.items() %}
+                    {% if profile_type != 'virtual-ap' %}
+                        <li>
+                            {{ profile_type }}:
+                            <ul>
+                                {% for profile in profile_list %}
+                                    <li>{{ profile }}</li>
+                                {% endfor %}
+                            </ul>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </li>
+    {% endfor %}
+    </ul>
+{% endmacro %}
+
+<div class="config-tree">
+    {{ render_config(config) }}
+</div> 
