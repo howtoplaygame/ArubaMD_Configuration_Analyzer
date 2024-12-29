@@ -892,6 +892,9 @@ def upload_file():
         return jsonify({'error': 'Please provide configuration content'})
     
     try:
+        # 增加计数器
+        counter = increment_counter()
+        
         # 保存原始内容
         saved_filename = save_content(content)
         if not saved_filename:
@@ -929,7 +932,8 @@ def upload_file():
                              uploaded_content=content,
                              default_content=default_content,
                              analysis_results=analysis_results,
-                             save_stats=stats)
+                             save_stats=stats,
+                             counter=counter)
             
     except Exception as e:
         error_msg = f'Error processing configuration: {str(e)}'
