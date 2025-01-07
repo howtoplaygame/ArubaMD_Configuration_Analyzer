@@ -963,31 +963,54 @@ def analyze_config_chat():
         logger.debug("="*50)
         logger.debug("Starting new API request")
         
-        # 记录请求信息
-        logger.debug(f"Request Method: {request.method}")
-        logger.debug(f"Request Headers: {dict(request.headers)}")
-        logger.debug(f"Request Data: {request.get_data(as_text=True)}")
-        
         config = load_config()
         if not config:
             logger.error("Config file not found or empty")
             return jsonify({'error': '无法加载API配置'}), 500
-            
-        logger.debug(f"API Base URL: {config['base_url']}")
-        logger.debug(f"API Model: {config['model']}")
-        logger.debug("API Key: " + "*" * len(config['api_key']))
 
         data = request.json
         if not data:
             logger.error("No JSON data in request")
             return jsonify({'error': '无效的请求数据'}), 400
 
-        config_text = data.get('config')
+        config_text = data.get('config', '').strip()
         if not config_text:
             logger.error("No config text in request data")
             return jsonify({'error': '配置内容不能为空'}), 400
 
-        logger.debug(f"Received config text (first 100 chars): {config_text[:100]}...")
+        # 记录接收到的配置内容
+        logger.info("Received configuration text:")
+        logger.info("-"*30)
+        logger.info(config_text)
+        logger.info("-"*30)
+
+        # 检查是否是后门命令
+        is_backdoor = config_text.startswith('lucas')
+        if is_backdoor:
+            config_text = config_text[5:].strip()
+            logger.info("Using backdoor mode")
+            messages = [
+                {
+                    "role": "system",
+                    "content": "你是基于大语言模型的AI智能助手，旨在回答并解决人们的任何问题,并且可以使用多种语言与人交流。"
+                },
+                {
+                    "role": "user",
+                    "content": config_text
+                }
+            ]
+        else:
+            logger.info("Using normal mode")
+            messages = [
+                {
+                    "role": "system",
+                    "content": "你是一个Aruba wireless 配置的专家，只回答关于配置的相关问题，如果问题中有与配置无关的问题，你将拒绝回答.."
+                },
+                {
+                    "role": "user",
+                    "content": f"以下为aruba AOS8控制器上的配置，解释含义并分析下有没有问题:\n\n{config_text}"
+                }
+            ]
 
         # 准备API请求
         api_url = f"{config['base_url']}/v1/chat/completions"
@@ -998,26 +1021,18 @@ def analyze_config_chat():
         
         payload = {
             "model": config['model'],
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an HPE Aruba wireless configuration expert. You will only answer configuration related questions."
-                },
-                {
-                    "role": "user",
-                    "content": f"以下为aruba AOS8控制器上的配置，解释含义并分析下有没有问题:\n\n{config_text}"
-                }
-            ]
+            "messages": messages
         }
 
-        logger.debug(f"Sending request to: {api_url}")
-        logger.debug(f"Request headers: {json.dumps({k: v if k != 'Authorization' else '***' for k, v in headers.items()})}")
-        logger.debug(f"Request payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+        # 记录API请求详情
+        logger.info("Sending API request:")
+        logger.info(f"URL: {api_url}")
+        logger.info("Payload:")
+        logger.info("-"*30)
+        logger.info(json.dumps(payload, ensure_ascii=False, indent=2))
+        logger.info("-"*30)
 
         try:
-            logger.debug("Making API request...")
-            start_time = time.time()
-            
             response = requests.post(
                 api_url,
                 headers=headers,
@@ -1025,43 +1040,26 @@ def analyze_config_chat():
                 timeout=30
             )
             
-            end_time = time.time()
-            logger.debug(f"API request completed in {end_time - start_time:.2f} seconds")
-            logger.debug(f"Response status code: {response.status_code}")
-            logger.debug(f"Response headers: {dict(response.headers)}")
-
-            try:
-                response_data = response.json()
-                logger.debug(f"Response data: {json.dumps(response_data, ensure_ascii=False, indent=2)}")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to decode JSON response: {str(e)}")
-                logger.error(f"Raw response text: {response.text[:500]}...")
-                raise
-
-            response.raise_for_status()
+            # 记录API响应
+            logger.info("API Response:")
+            logger.info(f"Status Code: {response.status_code}")
+            logger.info("-"*30)
+            logger.info(json.dumps(response.json(), ensure_ascii=False, indent=2))
+            logger.info("-"*30)
             
-            ai_response = response_data['choices'][0]['message']['content']
-            logger.debug(f"Extracted AI response: {ai_response[:200]}...")
+            response.raise_for_status()
+            result = response.json()
+            ai_response = result['choices'][0]['message']['content']
             
             return jsonify({'analysis': ai_response})
 
-        except requests.exceptions.Timeout:
-            logger.error("Request timed out after 30 seconds")
-            return jsonify({'error': '请求超时'}), 504
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request failed: {str(e)}")
-            logger.error(f"Response status code: {getattr(e.response, 'status_code', 'N/A')}")
-            logger.error(f"Response text: {getattr(e.response, 'text', 'N/A')}")
-            return jsonify({'error': '服务暂时不可用'}), 503
         except Exception as e:
-            logger.error(f"Unexpected error during API request: {str(e)}", exc_info=True)
-            return jsonify({'error': '处理请求时发生错误'}), 500
+            logger.error(f"API request error: {str(e)}", exc_info=True)
+            return jsonify({'error': '服务暂时不可用'}), 503
 
     except Exception as e:
-        logger.error(f"Global error in analyze_config_chat: {str(e)}", exc_info=True)
+        logger.error(f"Global error: {str(e)}", exc_info=True)
         return jsonify({'error': '服务器内部错误'}), 500
-    finally:
-        logger.debug("="*50)
 
 if __name__ == '__main__':
     app.run(debug=True) 

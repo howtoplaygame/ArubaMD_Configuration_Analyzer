@@ -128,6 +128,20 @@
             color: #16a085;
             font-weight: bold;
         }
+        .clear-btn {
+            padding: 2px 8px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .clear-btn:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -144,6 +158,7 @@
             <div class="input-area">
                 <div class="char-counter">
                     <span id="charCount">0</span>/1000 字符
+                    <button class="clear-btn" onclick="clearInput()">清空</button>
                 </div>
                 <textarea id="configInput" 
                           maxlength="1000" 
@@ -191,34 +206,48 @@
             response.textContent = '';
 
             try {
-                console.log('Sending request to analyze config...');
+                const requestData = {
+                    config: configInput.value
+                };
+                
+                // 记录请求数据
+                console.log('Request payload:', JSON.stringify(requestData, null, 2));
+                console.log('Request timestamp:', new Date().toISOString());
+                const startTime = performance.now();
+
                 const res = await fetch('/analyze_config_chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        config: configInput.value
-                    })
+                    body: JSON.stringify(requestData)
                 });
 
+                const endTime = performance.now();
+                console.log('Response timestamp:', new Date().toISOString());
+                console.log('Request duration:', (endTime - startTime).toFixed(2), 'ms');
                 console.log('Response status:', res.status);
+                console.log('Response headers:', Object.fromEntries([...res.headers]));
                 
                 if (!res.ok) {
-                    throw new Error('Network response was not ok');
+                    throw new Error(`Network response was not ok: ${res.status} ${res.statusText}`);
                 }
 
                 const data = await res.json();
-                console.log('Response data:', data);
+                console.log('Response data:', JSON.stringify(data, null, 2));
                 
                 if (data.error) {
                     throw new Error(data.error);
                 }
 
-                // 修改显示响应的部分
-                response.innerHTML = formatResponse(data.analysis);  // 使用innerHTML代替textContent
+                // 显示响应
+                response.innerHTML = formatResponse(data.analysis);
             } catch (err) {
-                console.error('Error:', err);
+                console.error('Error details:', {
+                    name: err.name,
+                    message: err.message,
+                    stack: err.stack
+                });
                 error.style.display = 'block';
             } finally {
                 loading.style.display = 'none';
@@ -247,6 +276,15 @@
             const textarea = document.getElementById('configInput');
             updateCharCount(textarea);
         });
+
+        function clearInput() {
+            const textarea = document.getElementById('configInput');
+            textarea.value = '';
+            updateCharCount(textarea);
+            // 同时清空响应区域
+            document.getElementById('response').innerHTML = '';
+            document.getElementById('error').style.display = 'none';
+        }
     </script>
 </body>
 </html> 
