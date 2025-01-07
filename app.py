@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 import logging
 import json
+import requests
 
 app = Flask(__name__)
 # 设置最大文件大小为1MB
@@ -24,8 +25,8 @@ if not os.path.exists(log_dir):
 
 # 配置日志
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
     handlers=[
         logging.FileHandler(os.path.join(log_dir, 'app.log'), encoding='utf-8'),
         logging.StreamHandler()
@@ -939,6 +940,128 @@ def upload_file():
         error_msg = f'Error processing configuration: {str(e)}'
         logger.error(error_msg)
         return jsonify({'error': error_msg})
+
+# 读取配置文件
+def load_config():
+    config_path = os.path.join('templates', 'config.json')
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading config: {str(e)}")
+        return None
+
+# 新增聊天页面路由
+@app.route('/chat')
+def chat():
+    return render_template('chat.html')
+
+# 新增配置分析API路由 - 重命名为analyze_config_chat以避免冲突
+@app.route('/analyze_config_chat', methods=['POST'])
+def analyze_config_chat():
+    try:
+        logger.debug("="*50)
+        logger.debug("Starting new API request")
+        
+        # 记录请求信息
+        logger.debug(f"Request Method: {request.method}")
+        logger.debug(f"Request Headers: {dict(request.headers)}")
+        logger.debug(f"Request Data: {request.get_data(as_text=True)}")
+        
+        config = load_config()
+        if not config:
+            logger.error("Config file not found or empty")
+            return jsonify({'error': '无法加载API配置'}), 500
+            
+        logger.debug(f"API Base URL: {config['base_url']}")
+        logger.debug(f"API Model: {config['model']}")
+        logger.debug("API Key: " + "*" * len(config['api_key']))
+
+        data = request.json
+        if not data:
+            logger.error("No JSON data in request")
+            return jsonify({'error': '无效的请求数据'}), 400
+
+        config_text = data.get('config')
+        if not config_text:
+            logger.error("No config text in request data")
+            return jsonify({'error': '配置内容不能为空'}), 400
+
+        logger.debug(f"Received config text (first 100 chars): {config_text[:100]}...")
+
+        # 准备API请求
+        api_url = f"{config['base_url']}/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config['api_key']}"
+        }
+        
+        payload = {
+            "model": config['model'],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an HPE Aruba wireless configuration expert. You will only answer configuration related questions."
+                },
+                {
+                    "role": "user",
+                    "content": f"以下为aruba AOS8控制器上的配置，解释含义并分析下有没有问题:\n\n{config_text}"
+                }
+            ]
+        }
+
+        logger.debug(f"Sending request to: {api_url}")
+        logger.debug(f"Request headers: {json.dumps({k: v if k != 'Authorization' else '***' for k, v in headers.items()})}")
+        logger.debug(f"Request payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+
+        try:
+            logger.debug("Making API request...")
+            start_time = time.time()
+            
+            response = requests.post(
+                api_url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            end_time = time.time()
+            logger.debug(f"API request completed in {end_time - start_time:.2f} seconds")
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response headers: {dict(response.headers)}")
+
+            try:
+                response_data = response.json()
+                logger.debug(f"Response data: {json.dumps(response_data, ensure_ascii=False, indent=2)}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode JSON response: {str(e)}")
+                logger.error(f"Raw response text: {response.text[:500]}...")
+                raise
+
+            response.raise_for_status()
+            
+            ai_response = response_data['choices'][0]['message']['content']
+            logger.debug(f"Extracted AI response: {ai_response[:200]}...")
+            
+            return jsonify({'analysis': ai_response})
+
+        except requests.exceptions.Timeout:
+            logger.error("Request timed out after 30 seconds")
+            return jsonify({'error': '请求超时'}), 504
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {str(e)}")
+            logger.error(f"Response status code: {getattr(e.response, 'status_code', 'N/A')}")
+            logger.error(f"Response text: {getattr(e.response, 'text', 'N/A')}")
+            return jsonify({'error': '服务暂时不可用'}), 503
+        except Exception as e:
+            logger.error(f"Unexpected error during API request: {str(e)}", exc_info=True)
+            return jsonify({'error': '处理请求时发生错误'}), 500
+
+    except Exception as e:
+        logger.error(f"Global error in analyze_config_chat: {str(e)}", exc_info=True)
+        return jsonify({'error': '服务器内部错误'}), 500
+    finally:
+        logger.debug("="*50)
 
 if __name__ == '__main__':
     app.run(debug=True) 

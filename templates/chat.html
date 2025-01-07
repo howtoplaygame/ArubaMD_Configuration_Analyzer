@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Aruba配置分析助手</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .nav {
+            background-color: #16a085;
+            padding: 1rem;
+            margin-bottom: 20px;
+        }
+        .nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .chat-box {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-area {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .submit-btn {
+            padding: 12px 24px;
+            background-color: #16a085;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            align-self: flex-end;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .submit-btn:hover {
+            background-color: #138a72;
+        }
+        .submit-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .response-area {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            border: 1px solid #e9ecef;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+            color: #666;
+        }
+        .error {
+            color: #721c24;
+            background-color: #f8d7da;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+            border: 1px solid #f5c6cb;
+        }
+        .page-title {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .tips {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+        .char-counter {
+            text-align: right;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .char-counter.limit {
+            color: #dc3545;
+        }
+        
+        .response-area .heading {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 15px 0 10px 0;
+        }
+        
+        .response-area .highlight {
+            color: #16a085;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">返回首页</a>
+        <a href="/chat">配置分析</a>
+    </div>
+    <div class="container">
+        <h1 class="page-title">Aruba配置分析助手</h1>
+        <div class="tips">
+            提示：请输入需要分析的Aruba配置内容，支持完整配置或部分配置片段。AI将帮助您分析配置的合理性并提供建议。
+        </div>
+        <div class="chat-box">
+            <div class="input-area">
+                <div class="char-counter">
+                    <span id="charCount">0</span>/1000 字符
+                </div>
+                <textarea id="configInput" 
+                          maxlength="1000" 
+                          placeholder="请输入需要分析的配置内容...&#10;例如：&#10;wlan ssid-profile &quot;test&quot;&#10;  essid &quot;test&quot;&#10;  opmode wpa2-aes"
+                          onkeyup="updateCharCount(this)"></textarea>
+                <button id="submitBtn" class="submit-btn" onclick="analyzeConfig()">分析配置</button>
+            </div>
+            <div id="loading" class="loading">正在分析配置，请耐心等待...</div>
+            <div id="error" class="error">当前服务不可用，请稍后再试</div>
+            <div id="response" class="response-area"></div>
+        </div>
+    </div>
+
+    <script>
+        // 格式化响应文本
+        function formatResponse(text) {
+            if (!text) return '';
+            
+            // 处理 ### 标题
+            text = text.replace(/###\s*(.*?)(?:\n|$)/g, '<div class="heading">$1</div>');
+            
+            // 处理 **文字** 高亮
+            text = text.replace(/\*\*(.*?)\*\*/g, '<span class="highlight">$1</span>');
+            
+            return text;
+        }
+
+        async function analyzeConfig() {
+            const configInput = document.getElementById('configInput');
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const response = document.getElementById('response');
+
+            // 检查输入
+            if (!configInput.value.trim()) {
+                alert('请输入配置内容');
+                return;
+            }
+
+            // 显示加载状态
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            response.textContent = '';
+
+            try {
+                console.log('Sending request to analyze config...');
+                const res = await fetch('/analyze_config_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        config: configInput.value
+                    })
+                });
+
+                console.log('Response status:', res.status);
+                
+                if (!res.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const data = await res.json();
+                console.log('Response data:', data);
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // 修改显示响应的部分
+                response.innerHTML = formatResponse(data.analysis);  // 使用innerHTML代替textContent
+            } catch (err) {
+                console.error('Error:', err);
+                error.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        }
+
+        function updateCharCount(textarea) {
+            const maxLength = 1000;
+            const currentLength = textarea.value.length;
+            const charCountElement = document.getElementById('charCount');
+            const charCounter = charCountElement.parentElement;
+            
+            charCountElement.textContent = currentLength;
+            
+            // 当接近限制时改变颜色
+            if (currentLength >= maxLength * 0.9) {
+                charCounter.classList.add('limit');
+            } else {
+                charCounter.classList.remove('limit');
+            }
+        }
+        
+        // 页面加载时初始化计数器
+        document.addEventListener('DOMContentLoaded', function() {
+            const textarea = document.getElementById('configInput');
+            updateCharCount(textarea);
+        });
+    </script>
+</body>
+</html> 
