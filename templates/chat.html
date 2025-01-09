@@ -60,9 +60,9 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            align-self: flex-end;
             font-size: 16px;
             transition: background-color 0.3s;
+            min-width: 120px;
         }
         .submit-btn:hover {
             background-color: #138a72;
@@ -142,6 +142,38 @@
         .clear-btn:hover {
             background-color: #c82333;
         }
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .model-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            width: 200px;
+            background-color: white;
+        }
+        
+        .model-select:focus {
+            outline: none;
+            border-color: #16a085;
+        }
+        
+        .model-selector label {
+            font-weight: bold;
+            color: #2c3e50;
+            white-space: nowrap;
+        }
+        .action-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-top: 10px;
+            gap: 20px;
+        }
     </style>
 </head>
 <body>
@@ -164,7 +196,15 @@
                           maxlength="1000" 
                           placeholder="请输入需要分析的配置内容...&#10;例如：&#10;wlan ssid-profile &quot;test&quot;&#10;  essid &quot;test&quot;&#10;  opmode wpa2-aes"
                           onkeyup="updateCharCount(this)"></textarea>
-                <button id="submitBtn" class="submit-btn" onclick="analyzeConfig()">分析配置</button>
+                <div class="action-row">
+                    <div class="model-selector">
+                        <label for="modelSelect">选择模型：</label>
+                        <select id="modelSelect" class="model-select">
+                            <!-- 将由JavaScript动态填充 -->
+                        </select>
+                    </div>
+                    <button id="submitBtn" class="submit-btn" onclick="analyzeConfig()">分析配置</button>
+                </div>
             </div>
             <div id="loading" class="loading">正在分析配置，请耐心等待...</div>
             <div id="error" class="error">当前服务不可用，请稍后再试</div>
@@ -188,6 +228,7 @@
 
         async function analyzeConfig() {
             const configInput = document.getElementById('configInput');
+            const modelSelect = document.getElementById('modelSelect');
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
@@ -207,7 +248,8 @@
 
             try {
                 const requestData = {
-                    config: configInput.value
+                    config: configInput.value,
+                    model: modelSelect.value
                 };
                 
                 // 记录请求数据
@@ -273,6 +315,7 @@
         
         // 页面加载时初始化计数器
         document.addEventListener('DOMContentLoaded', function() {
+            loadModels();  // 加载模型列表
             const textarea = document.getElementById('configInput');
             updateCharCount(textarea);
         });
@@ -284,6 +327,28 @@
             // 同时清空响应区域
             document.getElementById('response').innerHTML = '';
             document.getElementById('error').style.display = 'none';
+        }
+
+        // 加载模型列表
+        async function loadModels() {
+            try {
+                const response = await fetch('/get_models');
+                const data = await response.json();
+                const select = document.getElementById('modelSelect');
+                
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.text = model.name;
+                    option.title = model.description;
+                    if (model.id === data.default_model) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading models:', error);
+            }
         }
     </script>
 </body>

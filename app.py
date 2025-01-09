@@ -974,6 +974,11 @@ def analyze_config_chat():
             return jsonify({'error': '无效的请求数据'}), 400
 
         config_text = data.get('config', '').strip()
+        # 获取选择的模型ID，如果没有则使用默认模型
+        model_id = data.get('model', config.get('default_model'))
+        
+        logger.info(f"Using model: {model_id}")
+
         if not config_text:
             logger.error("No config text in request data")
             return jsonify({'error': '配置内容不能为空'}), 400
@@ -1004,7 +1009,7 @@ def analyze_config_chat():
             messages = [
                 {
                     "role": "system",
-                    "content": "你是一个Aruba wireless 配置的专家，只回答关于配置的相关问题，如果问题中有与配置无关的问题，你将拒绝回答.."
+                    "content": "你是一个Aruba wireless 配置的专家，只回答关于配置的相关问题，如果问题中有与配置无关的问题，你将拒绝回答."
                 },
                 {
                     "role": "user",
@@ -1020,7 +1025,7 @@ def analyze_config_chat():
         }
         
         payload = {
-            "model": config['model'],
+            "model": model_id,  # 使用选择的模型
             "messages": messages
         }
 
@@ -1060,6 +1065,27 @@ def analyze_config_chat():
     except Exception as e:
         logger.error(f"Global error: {str(e)}", exc_info=True)
         return jsonify({'error': '服务器内部错误'}), 500
+
+# 添加新路由获取模型列表
+@app.route('/get_models')
+def get_models():
+    try:
+        config = load_config()
+        if not config:
+            logger.error("Could not load config file")
+            return jsonify({'error': '无法加载配置'}), 500
+            
+        models = config.get('models', [])
+        default_model = config.get('default_model')
+        
+        logger.info(f"Returning {len(models)} models, default: {default_model}")
+        return jsonify({
+            'models': models,
+            'default_model': default_model
+        })
+    except Exception as e:
+        logger.error(f"Error getting models: {str(e)}")
+        return jsonify({'error': '获取模型列表失败'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
