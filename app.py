@@ -974,10 +974,11 @@ def analyze_config_chat():
             return jsonify({'error': '无效的请求数据'}), 400
 
         config_text = data.get('config', '').strip()
-        # 获取选择的模型ID，如果没有则使用默认模型
         model_id = data.get('model', config.get('default_model'))
         
-        logger.info(f"Using model: {model_id}")
+        # 根据model设置timeout
+        timeout_value = (30, 120) if model_id == 'lucastest' else 30
+        logger.info(f"Using model: {model_id}, timeout: {timeout_value}")
 
         if not config_text:
             logger.error("No config text in request data")
@@ -1042,7 +1043,7 @@ def analyze_config_chat():
                 api_url,
                 headers=headers,
                 json=payload,
-                timeout=30
+                timeout=timeout_value  # 使用动态的timeout值
             )
             
             # 记录API响应
