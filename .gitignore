@@ -4,6 +4,6 @@ data/
 log/
 pdf2zh/
 template/counters
-task/
+tasks/
 .DS_Store
 
