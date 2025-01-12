@@ -1332,9 +1332,31 @@ def stream_progress(task_id):
                                         yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
                                         if '100%' in line:
                                             progress_100_seen = True
-                                    else:
-                                        logger.debug(f"Task {task_id} output: {line}")
-                                        yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
+                                            # 看到100%后等待一会儿，让文件写入完成
+                                            time.sleep(2)
+                                            # 检查文件是否生成
+                                            mono_exists = mono_file.exists()
+                                            dual_exists = dual_file.exists()
+                                            
+                                            if mono_exists or dual_exists:
+                                                logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
+                                                files = {
+                                                    'mono': {
+                                                        'name': f"{base_name}-mono.pdf",
+                                                        'exists': mono_exists,
+                                                        'description': '单语翻译版本'
+                                                    },
+                                                    'dual': {
+                                                        'name': f"{base_name}-dual.pdf",
+                                                        'exists': dual_exists,
+                                                        'description': '双语对照版本'
+                                                    }
+                                                }
+                                                yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                                                return
+                                        else:
+                                            logger.debug(f"Task {task_id} output: {line}")
+                                            yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
                     except Exception as e:
                         logger.error(f"Error reading progress: {str(e)}")
                     
@@ -1342,18 +1364,63 @@ def stream_progress(task_id):
                     try:
                         if not process.is_running():
                             if progress_100_seen:
-                                time.sleep(1)  # 等待文件写入完成
-                                break
+                                # 已经看到100%，最后检查一次文件
+                                time.sleep(2)
+                                mono_exists = mono_file.exists()
+                                dual_exists = dual_file.exists()
+                                
+                                if mono_exists or dual_exists:
+                                    logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
+                                    files = {
+                                        'mono': {
+                                            'name': f"{base_name}-mono.pdf",
+                                            'exists': mono_exists,
+                                            'description': '单语翻译版本'
+                                        },
+                                        'dual': {
+                                            'name': f"{base_name}-dual.pdf",
+                                            'exists': dual_exists,
+                                            'description': '双语对照版本'
+                                        }
+                                    }
+                                    yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                                    return
+                                else:
+                                    logger.error(f"Process ended, saw 100% but no files found for task {task_id}")
+                                    yield f"data: {json.dumps({'error': '翻译完成但未找到输出文件'})}\n\n"
                             else:
                                 logger.error(f"Process ended but never reached 100% for task {task_id}")
                                 yield f"data: {json.dumps({'error': '翻译进程异常结束'})}\n\n"
-                                break
+                            break
                     except psutil.NoSuchProcess:
-                        if not progress_100_seen:
+                        if progress_100_seen:
+                            # 进程已结束但看到了100%，最后检查一次文件
+                            time.sleep(2)
+                            mono_exists = mono_file.exists()
+                            dual_exists = dual_file.exists()
+                            
+                            if mono_exists or dual_exists:
+                                logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
+                                files = {
+                                    'mono': {
+                                        'name': f"{base_name}-mono.pdf",
+                                        'exists': mono_exists,
+                                        'description': '单语翻译版本'
+                                    },
+                                    'dual': {
+                                        'name': f"{base_name}-dual.pdf",
+                                        'exists': dual_exists,
+                                        'description': '双语对照版本'
+                                    }
+                                }
+                                yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                                return
+                            else:
+                                logger.error(f"Process died, saw 100% but no files found for task {task_id}")
+                                yield f"data: {json.dumps({'error': '翻译完成但未找到输出文件'})}\n\n"
+                        else:
                             logger.error(f"Process died unexpectedly for task {task_id}")
                             yield f"data: {json.dumps({'error': '翻译进程意外终止'})}\n\n"
-                            break
-                        time.sleep(1)  # 等待文件写入完成
                         break
                     
                     time.sleep(0.1)
