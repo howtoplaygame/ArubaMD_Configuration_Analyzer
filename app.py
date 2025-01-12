@@ -18,6 +18,7 @@ import glob
 from pathlib import Path
 from werkzeug.utils import secure_filename
 import select  # 添加这个导入
+import psutil
 
 
 app = Flask(__name__)
@@ -1114,6 +1115,10 @@ def translate_pdf():
         pdf_dir = Path('./pdf2zh')
         pdf_dir.mkdir(exist_ok=True)
         
+        # 创建任务目录
+        tasks_dir = Path('./tasks')
+        tasks_dir.mkdir(exist_ok=True)
+        
         if 'file' not in request.files:
             logger.error("No file in request")
             return jsonify({'error': '没有选择文件'}), 400
@@ -1163,13 +1168,18 @@ def translate_pdf():
         )
         
         task_id = str(int(time.time()))
-        app.config[f'process_{task_id}'] = {
-            'process': process,
-            'filename': filename
+        
+        # 将任务信息写入文件
+        task_info = {
+            'pid': process.pid,
+            'filename': filename,
+            'created_at': time.time()
         }
         
+        with open(tasks_dir / f"{task_id}.json", 'w') as f:
+            json.dump(task_info, f)
+            
         logger.info(f"Created task {task_id} for file {filename}")
-        logger.debug(f"Current app.config keys: {[k for k in app.config.keys() if k.startswith('process_')]}")
         
         return jsonify({'task_id': task_id})
         
@@ -1187,83 +1197,77 @@ def download_file(filename):
 def stream_progress(task_id):
     def generate():
         logger.info(f"Starting progress stream for task {task_id}")
-        logger.debug(f"Available tasks: {[k for k in app.config.keys() if k.startswith('process_')]}")
         
         pdf_dir = Path('./pdf2zh')
+        tasks_dir = Path('./tasks')
+        task_file = tasks_dir / f"{task_id}.json"
         
-        task_info = app.config.get(f'process_{task_id}')
-        if not task_info:
-            logger.error(f"Task {task_id} not found in app.config")
+        if not task_file.exists():
+            logger.error(f"Task file not found: {task_file}")
             yield "data: {\"error\": \"任务不存在\"}\n\n"
             return
-        
-        process = task_info['process']
-        filename = task_info['filename']
-        logger.info(f"Found task {task_id} for file {filename}")
-        
-        yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
-        
+            
         try:
-            while True:
-                return_code = process.poll()
-                logger.debug(f"Task {task_id} return code: {return_code}")
+            with open(task_file) as f:
+                task_info = json.load(f)
+            
+            logger.info(f"Found task {task_id} for file {task_info['filename']}")
+            
+            # 尝试获取进程
+            try:
+                process = psutil.Process(task_info['pid'])
+            except psutil.NoSuchProcess:
+                logger.error(f"Process {task_info['pid']} not found")
+                yield "data: {\"error\": \"任务已结束\"}\n\n"
+                return
                 
-                line = process.stderr.readline()
-                if line:
-                    line = line.strip()
-                    if '%' in line or 'it/s' in line:
-                        logger.debug(f"Task {task_id} progress: {line}")
-                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                    else:
-                        logger.warning(f"Task {task_id} error output: {line}")
-                        yield f"data: {json.dumps({'error': line})}\n\n"
-                
-                if return_code is not None:
-                    if return_code != 0:
-                        logger.error(f"Task {task_id} failed with return code {return_code}")
-                        yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
-                    else:
-                        logger.info(f"Task {task_id} completed successfully")
-                        base_name = Path(filename).stem
-                        mono_file = f"{base_name}-mono.pdf"
-                        dual_file = f"{base_name}-dual.pdf"
-                        
-                        time.sleep(1)
-                        
-                        mono_exists = (pdf_dir / mono_file).exists()
-                        dual_exists = (pdf_dir / dual_file).exists()
-                        
-                        logger.info(f"Task {task_id} output files: mono={mono_exists}, dual={dual_exists}")
-                        
-                        if mono_exists or dual_exists:
-                            files = {
-                                'mono': {
-                                    'name': mono_file,
-                                    'exists': mono_exists,
-                                    'description': '单语翻译版本'
-                                },
-                                'dual': {
-                                    'name': dual_file,
-                                    'exists': dual_exists,
-                                    'description': '双语对照版本'
-                                }
+            yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
+            
+            # 监控进程输出
+            while process.is_running():
+                try:
+                    # 检查输出文件是否存在
+                    base_name = Path(task_info['filename']).stem
+                    mono_file = f"{base_name}-mono.pdf"
+                    dual_file = f"{base_name}-dual.pdf"
+                    
+                    mono_exists = (pdf_dir / mono_file).exists()
+                    dual_exists = (pdf_dir / dual_file).exists()
+                    
+                    if mono_exists or dual_exists:
+                        logger.info(f"Task {task_id} completed, files found")
+                        files = {
+                            'mono': {
+                                'name': mono_file,
+                                'exists': mono_exists,
+                                'description': '单语翻译版本'
+                            },
+                            'dual': {
+                                'name': dual_file,
+                                'exists': dual_exists,
+                                'description': '双语对照版本'
                             }
-                            yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
-                        else:
-                            logger.error(f"Task {task_id} no output files found")
-                            yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
+                        }
+                        yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                        break
+                        
+                    time.sleep(0.5)
+                    
+                except psutil.NoSuchProcess:
+                    logger.error(f"Process ended unexpectedly")
+                    yield f"data: {json.dumps({'error': '进程意外结束'})}\n\n"
                     break
-                
-                time.sleep(0.1)
+                    
         except Exception as e:
             logger.error(f"Error in stream_progress for task {task_id}: {str(e)}", exc_info=True)
             yield f"data: {json.dumps({'error': f'监控进度出错: {str(e)}'})}\n\n"
         finally:
-            # 清理
-            logger.info(f"Cleaning up task {task_id}")
-            if f'process_{task_id}' in app.config:
-                del app.config[f'process_{task_id}']
-            logger.debug(f"Remaining tasks: {[k for k in app.config.keys() if k.startswith('process_')]}")
+            # 清理任务文件
+            try:
+                task_file.unlink()
+                logger.info(f"Cleaned up task file: {task_file}")
+            except Exception as e:
+                logger.error(f"Error cleaning up task file: {str(e)}")
         
     return Response(generate(), mimetype='text/event-stream')
 
