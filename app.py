@@ -1300,32 +1300,42 @@ def stream_progress(task_id):
                         logger.error(f"Process ended unexpectedly")
                         yield f"data: {json.dumps({'error': '进程意外结束'})}\n\n"
                         break
+                
+                # 进程结束后等待一会，确保文件写入完成
+                time.sleep(1)
             
-            # 检查输出文件
+            # 检查输出文件（无论是本地还是生产环境都执行）
+            logger.info(f"Checking output files for task {task_id}")
             base_name = Path(task_info['filename']).stem
             mono_file = f"{base_name}-mono.pdf"
             dual_file = f"{base_name}-dual.pdf"
             
-            mono_exists = (pdf_dir / mono_file).exists()
-            dual_exists = (pdf_dir / dual_file).exists()
-            
-            if mono_exists or dual_exists:
-                logger.info(f"Task {task_id} completed, files found")
-                files = {
-                    'mono': {
-                        'name': mono_file,
-                        'exists': mono_exists,
-                        'description': '单语翻译版本'
-                    },
-                    'dual': {
-                        'name': dual_file,
-                        'exists': dual_exists,
-                        'description': '双语对照版本'
+            # 多次尝试检查文件，因为文件写入可能有延迟
+            for _ in range(5):  # 最多尝试5次
+                mono_exists = (pdf_dir / mono_file).exists()
+                dual_exists = (pdf_dir / dual_file).exists()
+                
+                if mono_exists or dual_exists:
+                    logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
+                    files = {
+                        'mono': {
+                            'name': mono_file,
+                            'exists': mono_exists,
+                            'description': '单语翻译版本'
+                        },
+                        'dual': {
+                            'name': dual_file,
+                            'exists': dual_exists,
+                            'description': '双语对照版本'
+                        }
                     }
-                }
-                yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
-            else:
-                logger.error(f"Task {task_id} no output files found")
+                    yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                    break
+                
+                logger.debug(f"Files not found yet, retrying... ({_ + 1}/5)")
+                time.sleep(1)  # 等待1秒后重试
+            else:  # 如果循环正常结束（没有break）
+                logger.error(f"Task {task_id} no output files found after retries")
                 yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
                     
         except Exception as e:
