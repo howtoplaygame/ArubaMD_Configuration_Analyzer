@@ -1128,6 +1128,24 @@ def translate_pdf():
             return jsonify({'error': '没有选择文件'}), 400
         
         filename = secure_filename(file.filename)
+        base_name = Path(filename).stem
+        
+        # 检查并删除可能存在的旧翻译文件
+        mono_file = pdf_dir / f"{base_name}-mono.pdf"
+        dual_file = pdf_dir / f"{base_name}-dual.pdf"
+        
+        try:
+            if mono_file.exists():
+                logger.info(f"Removing existing mono file: {mono_file}")
+                mono_file.unlink()
+            if dual_file.exists():
+                logger.info(f"Removing existing dual file: {dual_file}")
+                dual_file.unlink()
+        except Exception as e:
+            logger.error(f"Error removing existing translation files: {str(e)}")
+            return jsonify({'error': '无法清理旧的翻译文件'}), 500
+        
+        # 保存上传的文件
         filepath = pdf_dir / filename
         file.save(filepath)
         logger.info(f"Saved file: {filepath}")
@@ -1275,8 +1293,15 @@ def stream_progress(task_id):
                 
                 # 从文件读取输出
                 last_position = 0
-                while process.is_running():
+                process_running = True
+                last_progress = None
+                
+                while process_running:
                     try:
+                        # 检查进程是否还在运行
+                        process_running = process.is_running()
+                        
+                        # 读取输出文件
                         if stderr_file.exists():
                             with open(stderr_file, 'r') as f:
                                 f.seek(last_position)
@@ -1289,17 +1314,23 @@ def stream_progress(task_id):
                                     logger.debug(f"Raw output: {line}")
                                     if '%' in line or 'it/s' in line:
                                         logger.debug(f"Task {task_id} progress: {line}")
+                                        last_progress = line
                                         yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
                                     else:
                                         logger.debug(f"Task {task_id} output: {line}")
                                         yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
                         
+                        # 如果进程已结束且最后一次进度是100%，就跳出循环
+                        if not process_running and last_progress and '100%' in last_progress:
+                            logger.info(f"Process completed with 100% progress: {last_progress}")
+                            break
+                            
                         time.sleep(0.1)
                         
                     except psutil.NoSuchProcess:
                         logger.error(f"Process ended unexpectedly")
-                        yield f"data: {json.dumps({'error': '进程意外结束'})}\n\n"
-                        break
+                        # 不要立即退出，继续检查文件
+                        process_running = False
                 
                 # 进程结束后等待一会，确保文件写入完成
                 time.sleep(1)
