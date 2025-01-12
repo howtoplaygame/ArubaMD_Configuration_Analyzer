@@ -1115,14 +1115,17 @@ def translate_pdf():
         pdf_dir.mkdir(exist_ok=True)
         
         if 'file' not in request.files:
+            logger.error("No file in request")
             return jsonify({'error': '没有选择文件'}), 400
         file = request.files['file']
         if file.filename == '':
+            logger.error("Empty filename")
             return jsonify({'error': '没有选择文件'}), 400
         
         filename = secure_filename(file.filename)
         filepath = pdf_dir / filename
         file.save(filepath)
+        logger.info(f"Saved file: {filepath}")
         
         # 构建命令
         cmd = ['pdf2zh', str(filename)]
@@ -1165,10 +1168,13 @@ def translate_pdf():
             'filename': filename
         }
         
+        logger.info(f"Created task {task_id} for file {filename}")
+        logger.debug(f"Current app.config keys: {[k for k in app.config.keys() if k.startswith('process_')]}")
+        
         return jsonify({'task_id': task_id})
         
     except Exception as e:
-        logger.error(f"Error in translate_pdf: {str(e)}")
+        logger.error(f"Error in translate_pdf: {str(e)}", exc_info=True)
         return jsonify({'error': f'处理失败: {str(e)}'}), 500
 
 # 添加文件下载路由
@@ -1180,70 +1186,84 @@ def download_file(filename):
 @app.route('/stream_progress/<task_id>')
 def stream_progress(task_id):
     def generate():
-        # 定义 pdf_dir
+        logger.info(f"Starting progress stream for task {task_id}")
+        logger.debug(f"Available tasks: {[k for k in app.config.keys() if k.startswith('process_')]}")
+        
         pdf_dir = Path('./pdf2zh')
         
         task_info = app.config.get(f'process_{task_id}')
         if not task_info:
+            logger.error(f"Task {task_id} not found in app.config")
             yield "data: {\"error\": \"任务不存在\"}\n\n"
             return
         
         process = task_info['process']
         filename = task_info['filename']
+        logger.info(f"Found task {task_id} for file {filename}")
         
         yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
         
-        while True:
-            # 检查进程是否结束
-            return_code = process.poll()
-            
-            # 读取输出
-            line = process.stderr.readline()
-            if line:
-                line = line.strip()
-                if '%' in line or 'it/s' in line:
-                    yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'error': line})}\n\n"
-            
-            # 如果进程结束
-            if return_code is not None:
-                if return_code != 0:
-                    yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
-                else:
-                    # 检查输出文件
-                    base_name = Path(filename).stem
-                    mono_file = f"{base_name}-mono.pdf"
-                    dual_file = f"{base_name}-dual.pdf"
-                    
-                    # 等待文件生成
-                    time.sleep(1)
-                    
-                    mono_exists = (pdf_dir / mono_file).exists()
-                    dual_exists = (pdf_dir / dual_file).exists()
-                    
-                    if mono_exists or dual_exists:
-                        files = {
-                            'mono': {
-                                'name': mono_file,
-                                'exists': mono_exists,
-                                'description': '单语翻译版本'
-                            },
-                            'dual': {
-                                'name': dual_file,
-                                'exists': dual_exists,
-                                'description': '双语对照版本'
-                            }
-                        }
-                        yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+        try:
+            while True:
+                return_code = process.poll()
+                logger.debug(f"Task {task_id} return code: {return_code}")
+                
+                line = process.stderr.readline()
+                if line:
+                    line = line.strip()
+                    if '%' in line or 'it/s' in line:
+                        logger.debug(f"Task {task_id} progress: {line}")
+                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
                     else:
-                        yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
-                break
-            
-            time.sleep(0.1)
-        
-        # 清理
-        del app.config[f'process_{task_id}']
+                        logger.warning(f"Task {task_id} error output: {line}")
+                        yield f"data: {json.dumps({'error': line})}\n\n"
+                
+                if return_code is not None:
+                    if return_code != 0:
+                        logger.error(f"Task {task_id} failed with return code {return_code}")
+                        yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
+                    else:
+                        logger.info(f"Task {task_id} completed successfully")
+                        base_name = Path(filename).stem
+                        mono_file = f"{base_name}-mono.pdf"
+                        dual_file = f"{base_name}-dual.pdf"
+                        
+                        time.sleep(1)
+                        
+                        mono_exists = (pdf_dir / mono_file).exists()
+                        dual_exists = (pdf_dir / dual_file).exists()
+                        
+                        logger.info(f"Task {task_id} output files: mono={mono_exists}, dual={dual_exists}")
+                        
+                        if mono_exists or dual_exists:
+                            files = {
+                                'mono': {
+                                    'name': mono_file,
+                                    'exists': mono_exists,
+                                    'description': '单语翻译版本'
+                                },
+                                'dual': {
+                                    'name': dual_file,
+                                    'exists': dual_exists,
+                                    'description': '双语对照版本'
+                                }
+                            }
+                            yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                        else:
+                            logger.error(f"Task {task_id} no output files found")
+                            yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
+                    break
+                
+                time.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Error in stream_progress for task {task_id}: {str(e)}", exc_info=True)
+            yield f"data: {json.dumps({'error': f'监控进度出错: {str(e)}'})}\n\n"
+        finally:
+            # 清理
+            logger.info(f"Cleaning up task {task_id}")
+            if f'process_{task_id}' in app.config:
+                del app.config[f'process_{task_id}']
+            logger.debug(f"Remaining tasks: {[k for k in app.config.keys() if k.startswith('process_')]}")
         
     return Response(generate(), mimetype='text/event-stream')
 
