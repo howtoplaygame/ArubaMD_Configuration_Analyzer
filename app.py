@@ -5,7 +5,7 @@ Aruba Configuration Analysis Tool
 Author: Lucas.Mei
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify
 import re
 import os
 import time
@@ -13,6 +13,7 @@ from datetime import datetime
 import logging
 import json
 import requests
+<<<<<<< HEAD
 import subprocess
 import glob
 from pathlib import Path
@@ -20,6 +21,8 @@ from werkzeug.utils import secure_filename
 import select  # 添加这个导入
 import redis
 import psutil
+=======
+>>>>>>> parent of 69a48b4 (Translate)
 
 app = Flask(__name__)
 # 设置最大文件大小为1MB
@@ -1101,6 +1104,7 @@ def get_models():
         logger.error(f"Error getting models: {str(e)}")
         return jsonify({'error': '获取模型列表失败'}), 500
 
+<<<<<<< HEAD
 # 添加新路由
 @app.route('/tran')
 def tran():
@@ -1327,5 +1331,7 @@ def convert_to_docx(filename):
         logger.error(f"Error in convert_to_docx: {str(e)}")
         return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
+=======
+>>>>>>> parent of 69a48b4 (Translate)
 if __name__ == '__main__':
     app.run(debug=True) 
