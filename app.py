@@ -1236,7 +1236,6 @@ def stream_progress(task_id):
         pdf_dir = Path('./pdf2zh')
         tasks_dir = Path('./tasks')
         task_file = tasks_dir / f"{task_id}.json"
-        stderr_file = tasks_dir / f"{task_id}.stderr"
         
         if not task_file.exists():
             logger.error(f"Task file not found: {task_file}")
@@ -1248,114 +1247,46 @@ def stream_progress(task_id):
                 task_info = json.load(f)
             
             logger.info(f"Found task {task_id} for file {task_info['filename']}")
-            
-            # 本地开发环境：使用存储的进程对象
-            if app.debug:
-                process = app.config.get(f'process_{task_id}')
-                if process is None:
-                    logger.error("Process not found in app.config")
-                    yield "data: {\"error\": \"任务不存在\"}\n\n"
-                    return
-                    
-                yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
-                
-                # 直接从进程读取输出
-                while True:
-                    return_code = process.poll()
-                    
-                    line = process.stderr.readline()
-                    if line:
-                        line = line.strip()
-                        if line:
-                            logger.debug(f"Raw output: {line}")
-                            if '%' in line or 'it/s' in line:
-                                logger.debug(f"Task {task_id} progress: {line}")
-                                yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                            else:
-                                logger.debug(f"Task {task_id} output: {line}")
-                                yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
-                    
-                    if return_code is not None:
-                        break
-                        
-                    time.sleep(0.1)
-                    
-            # 生产环境：使用文件和psutil
-            else:
-                try:
-                    process = psutil.Process(task_info['pid'])
-                except psutil.NoSuchProcess:
-                    logger.error(f"Process {task_info['pid']} not found")
-                    yield "data: {\"error\": \"任务已结束\"}\n\n"
-                    return
-                    
-                yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
-                
-                # 从文件读取输出
-                last_position = 0
-                process_running = True
-                last_progress = None
-                
-                while process_running:
-                    try:
-                        # 检查进程是否还在运行
-                        process_running = process.is_running()
-                        
-                        # 读取输出文件
-                        if stderr_file.exists():
-                            with open(stderr_file, 'r') as f:
-                                f.seek(last_position)
-                                lines = f.readlines()
-                                last_position = f.tell()
-                            
-                            for line in lines:
-                                line = line.strip()
-                                if line:
-                                    logger.debug(f"Raw output: {line}")
-                                    if '%' in line or 'it/s' in line:
-                                        logger.debug(f"Task {task_id} progress: {line}")
-                                        last_progress = line
-                                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                                    else:
-                                        logger.debug(f"Task {task_id} output: {line}")
-                                        yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
-                        
-                        # 如果进程已结束且最后一次进度是100%，就跳出循环
-                        if not process_running and last_progress and '100%' in last_progress:
-                            logger.info(f"Process completed with 100% progress: {last_progress}")
-                            break
-                            
-                        time.sleep(0.1)
-                        
-                    except psutil.NoSuchProcess:
-                        logger.error(f"Process ended unexpectedly")
-                        # 不要立即退出，继续检查文件
-                        process_running = False
-                
-                # 进程结束后等待一会，确保文件写入完成
-                time.sleep(1)
-            
-            # 检查输出文件（无论是本地还是生产环境都执行）
-            logger.info(f"Checking output files for task {task_id}")
             base_name = Path(task_info['filename']).stem
-            mono_file = f"{base_name}-mono.pdf"
-            dual_file = f"{base_name}-dual.pdf"
+            mono_file = pdf_dir / f"{base_name}-mono.pdf"
+            dual_file = pdf_dir / f"{base_name}-dual.pdf"
             
-            # 多次尝试检查文件，因为文件写入可能有延迟
-            for _ in range(5):  # 最多尝试5次
-                mono_exists = (pdf_dir / mono_file).exists()
-                dual_exists = (pdf_dir / dual_file).exists()
+            # 获取进程
+            try:
+                process = psutil.Process(task_info['pid'])
+            except psutil.NoSuchProcess:
+                logger.error(f"Process {task_info['pid']} not found")
+                # 即使进程不存在，也检查文件
+                pass
+            
+            yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
+            
+            # 监控翻译进度
+            start_time = time.time()
+            max_wait_time = 300  # 最长等待5分钟
+            check_interval = 0.5  # 每0.5秒检查一次
+            
+            while True:
+                # 检查是否超时
+                if time.time() - start_time > max_wait_time:
+                    logger.error(f"Task {task_id} timed out after {max_wait_time} seconds")
+                    yield f"data: {json.dumps({'error': '翻译超时'})}\n\n"
+                    break
+                
+                # 检查文件是否存在
+                mono_exists = mono_file.exists()
+                dual_exists = dual_file.exists()
                 
                 if mono_exists or dual_exists:
                     logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
                     files = {
                         'mono': {
-                            'name': mono_file,
+                            'name': f"{base_name}-mono.pdf",
                             'exists': mono_exists,
                             'description': '单语翻译版本'
                         },
                         'dual': {
-                            'name': dual_file,
+                            'name': f"{base_name}-dual.pdf",
                             'exists': dual_exists,
                             'description': '双语对照版本'
                         }
@@ -1363,24 +1294,35 @@ def stream_progress(task_id):
                     yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
                     break
                 
-                logger.debug(f"Files not found yet, retrying... ({_ + 1}/5)")
-                time.sleep(1)  # 等待1秒后重试
-            else:  # 如果循环正常结束（没有break）
-                logger.error(f"Task {task_id} no output files found after retries")
-                yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
-                    
+                # 检查进程状态
+                try:
+                    if 'process' in locals() and not process.is_running():
+                        # 进程结束但没有文件，等待一会儿再检查
+                        time.sleep(1)
+                        mono_exists = mono_file.exists()
+                        dual_exists = dual_file.exists()
+                        
+                        if mono_exists or dual_exists:
+                            continue  # 文件存在，继续循环会触发上面的完成逻辑
+                        else:
+                            logger.error(f"Process ended but no output files found for task {task_id}")
+                            yield f"data: {json.dumps({'error': '翻译进程结束但未找到输出文件'})}\n\n"
+                            break
+                except psutil.NoSuchProcess:
+                    pass
+                
+                # 发送进度更新
+                yield f"data: {json.dumps({'progress': '翻译中...', 'refresh': True})}\n\n"
+                time.sleep(check_interval)
+                
         except Exception as e:
             logger.error(f"Error in stream_progress for task {task_id}: {str(e)}", exc_info=True)
             yield f"data: {json.dumps({'error': f'监控进度出错: {str(e)}'})}\n\n"
         finally:
             # 清理任务文件
             try:
-                if not app.debug and stderr_file.exists():
-                    stderr_file.unlink()
                 task_file.unlink()
-                if app.debug and f'process_{task_id}' in app.config:
-                    del app.config[f'process_{task_id}']
-                logger.info(f"Cleaned up task files for {task_id}")
+                logger.info(f"Cleaned up task file for {task_id}")
             except Exception as e:
                 logger.error(f"Error cleaning up: {str(e)}")
         
