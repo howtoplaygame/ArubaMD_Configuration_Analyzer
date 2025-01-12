@@ -18,6 +18,8 @@ import glob
 from pathlib import Path
 from werkzeug.utils import secure_filename
 import select  # 添加这个导入
+import redis
+import psutil
 
 app = Flask(__name__)
 # 设置最大文件大小为1MB
@@ -43,6 +45,9 @@ logger = logging.getLogger(__name__)
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
+
+# 创建Redis连接
+redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 # 定义需要处理的配置段落类型
 VALID_SECTION_TYPES = {
@@ -94,6 +99,9 @@ VALID_SECTION_TYPES = {
     'dump-collection-profile',
     'ap-name'
 }
+
+# 在文件开头添加全局字典
+TASKS = {}
 
 def parse_section(line):
     """
@@ -1172,10 +1180,24 @@ def translate_pdf():
         os.set_blocking(process.stdout.fileno(), False)
         os.set_blocking(process.stderr.fileno(), False)
         
-        # 存储进程对象和原始文件名
+        # 存储进程信息到全局字典
         task_id = str(int(time.time()))
-        app.config[f'process_{task_id}'] = process
-        app.config[f'original_file_{task_id}'] = original_filename
+        TASKS[task_id] = {
+            'process': process,
+            'original_file': original_filename,
+            'created_at': time.time()
+        }
+        
+        # 清理超过1小时的任务
+        current_time = time.time()
+        expired_tasks = [tid for tid, task in TASKS.items() 
+                        if current_time - task['created_at'] > 3600]
+        for tid in expired_tasks:
+            try:
+                TASKS[tid]['process'].kill()
+            except:
+                pass
+            del TASKS[tid]
         
         logger.info(f"Started translation process with task_id: {task_id}")
         return jsonify({'task_id': task_id})
@@ -1193,65 +1215,49 @@ def download_file(filename):
 @app.route('/stream_progress/<task_id>')
 def stream_progress(task_id):
     def generate():
-        process = app.config.get(f'process_{task_id}')
-        if not process:
-            yield "data: {\"error\": \"任务不存在\"}\n\n"
+        task = TASKS.get(task_id)
+        if not task:
+            yield "data: {\"error\": \"任务不存在或已过期\"}\n\n"
             return
 
+        process = task['process']
         yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
         
         poll = select.poll()
         poll.register(process.stdout.fileno(), select.POLLIN)
         poll.register(process.stderr.fileno(), select.POLLIN)
             
-        while True:
-            return_code = process.poll()
-            
-            for fd, event in poll.poll(100):
-                if fd == process.stdout.fileno():
-                    line = process.stdout.readline()
-                    if line:
-                        line = line.strip()
-                        logger.info(f"Standard output: {line}")
-                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                elif fd == process.stderr.fileno():
-                    line = process.stderr.readline()
-                    if line:
-                        line = line.strip()
-                        if '%' in line or 'it/s' in line:
-                            logger.info(f"Progress output: {line}")
-                            yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                        else:
-                            logger.error(f"Error output: {line}")
-                            yield f"data: {json.dumps({'error': line})}\n\n"
-            
-            if return_code is not None:
-                # 读取任何剩余的输出
-                for line in process.stdout:
-                    if line:
-                        line = line.strip()
-                        logger.info(f"Final stdout: {line}")
-                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
+        try:
+            while True:
+                return_code = process.poll()
                 
-                for line in process.stderr:
-                    if line:
-                        line = line.strip()
-                        if '%' in line or 'it/s' in line:
-                            logger.info(f"Final progress: {line}")
+                for fd, event in poll.poll(100):
+                    if fd == process.stdout.fileno():
+                        line = process.stdout.readline()
+                        if line:
+                            line = line.strip()
+                            logger.info(f"Standard output: {line}")
                             yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                        else:
-                            logger.error(f"Final error: {line}")
-                            yield f"data: {json.dumps({'error': line})}\n\n"
+                    elif fd == process.stderr.fileno():
+                        line = process.stderr.readline()
+                        if line:
+                            line = line.strip()
+                            if '%' in line or 'it/s' in line:
+                                logger.info(f"Progress output: {line}")
+                                yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
+                            else:
+                                logger.error(f"Error output: {line}")
+                                yield f"data: {json.dumps({'error': line})}\n\n"
                 
-                if return_code != 0:
-                    yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
-                else:
-                    # 等待一会儿确保文件写入完成
-                    time.sleep(1)
-                    
-                    # 查找翻译后的文件
-                    original_file = app.config.get(f'original_file_{task_id}')
-                    if original_file:
+                if return_code is not None:
+                    if return_code != 0:
+                        yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
+                    else:
+                        # 等待一会儿确保文件写入完成
+                        time.sleep(1)
+                        
+                        # 查找翻译后的文件
+                        original_file = task['original_file']
                         base_name = Path(original_file).stem
                         mono_file = f"{base_name}-mono.pdf"
                         dual_file = f"{base_name}-dual.pdf"
@@ -1279,16 +1285,19 @@ def stream_progress(task_id):
                             time.sleep(1)
                         else:
                             yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
-                break
-            
-            time.sleep(0.1)
-            
-        # 清理
-        poll.unregister(process.stdout.fileno())
-        poll.unregister(process.stderr.fileno())
-        del app.config[f'process_{task_id}']
-        if f'original_file_{task_id}' in app.config:
-            del app.config[f'original_file_{task_id}']
+                    break
+                
+                time.sleep(0.1)
+                
+        finally:
+            # 清理
+            try:
+                poll.unregister(process.stdout.fileno())
+                poll.unregister(process.stderr.fileno())
+            except:
+                pass
+            if task_id in TASKS:
+                del TASKS[task_id]
         
     return Response(generate(), mimetype='text/event-stream')
 
