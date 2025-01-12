@@ -1,0 +1,6 @@
+.venv/
+backup/
+data/
+log/
+pdf2zh/
+template/counters

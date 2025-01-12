@@ -5,7 +5,7 @@ Aruba Configuration Analysis Tool
 Author: Lucas.Mei
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 import re
 import os
 import time
@@ -13,22 +13,12 @@ from datetime import datetime
 import logging
 import json
 import requests
-<<<<<<< HEAD
 import subprocess
 import glob
 from pathlib import Path
 from werkzeug.utils import secure_filename
 import select  # 添加这个导入
-<<<<<<< HEAD
-<<<<<<< HEAD
-import redis
-import psutil
-=======
->>>>>>> parent of 69a48b4 (Translate)
-=======
->>>>>>> parent of 69f0e10 (P1)
-=======
->>>>>>> parent of 69f0e10 (P1)
+
 
 app = Flask(__name__)
 # 设置最大文件大小为1MB
@@ -1104,7 +1094,6 @@ def get_models():
         logger.error(f"Error getting models: {str(e)}")
         return jsonify({'error': '获取模型列表失败'}), 500
 
-<<<<<<< HEAD
 # 添加新路由
 @app.route('/tran')
 def tran():
@@ -1125,22 +1114,18 @@ def translate_pdf():
         pdf_dir = Path('./pdf2zh')
         pdf_dir.mkdir(exist_ok=True)
         
-        # 检查文件上传
         if 'file' not in request.files:
             return jsonify({'error': '没有选择文件'}), 400
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': '没有选择文件'}), 400
         
-        # 保存上传的文件
         filename = secure_filename(file.filename)
         filepath = pdf_dir / filename
         file.save(filepath)
-        source = str(filename)
-        original_filename = filename
-
+        
         # 构建命令
-        cmd = ['pdf2zh', source]
+        cmd = ['pdf2zh', str(filename)]
         
         # 添加参数
         params = {
@@ -1154,7 +1139,6 @@ def translate_pdf():
             'prompt': request.form.get('prompt')
         }
         
-        # 添加非空参数到命令
         for key, value in params.items():
             if value:
                 if key == 'prompt':
@@ -1172,24 +1156,15 @@ def translate_pdf():
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True,
-            env={
-                **os.environ,
-                'PYTHONUNBUFFERED': '1',
-                'PYTHONIOENCODING': 'utf-8'
-            }
+            universal_newlines=True
         )
         
-        # 设置非阻塞模式
-        os.set_blocking(process.stdout.fileno(), False)
-        os.set_blocking(process.stderr.fileno(), False)
-        
-        # 存储进程对象和原始文件名
         task_id = str(int(time.time()))
-        app.config[f'process_{task_id}'] = process
-        app.config[f'original_file_{task_id}'] = original_filename
+        app.config[f'process_{task_id}'] = {
+            'process': process,
+            'filename': filename
+        }
         
-        logger.info(f"Started translation process with task_id: {task_id}")
         return jsonify({'task_id': task_id})
         
     except Exception as e:
@@ -1205,102 +1180,70 @@ def download_file(filename):
 @app.route('/stream_progress/<task_id>')
 def stream_progress(task_id):
     def generate():
-        process = app.config.get(f'process_{task_id}')
-        if not process:
+        # 定义 pdf_dir
+        pdf_dir = Path('./pdf2zh')
+        
+        task_info = app.config.get(f'process_{task_id}')
+        if not task_info:
             yield "data: {\"error\": \"任务不存在\"}\n\n"
             return
-
+        
+        process = task_info['process']
+        filename = task_info['filename']
+        
         yield "data: {\"progress\": \"开始翻译...\n\"}\n\n"
         
-        poll = select.poll()
-        poll.register(process.stdout.fileno(), select.POLLIN)
-        poll.register(process.stderr.fileno(), select.POLLIN)
-            
         while True:
+            # 检查进程是否结束
             return_code = process.poll()
             
-            for fd, event in poll.poll(100):
-                if fd == process.stdout.fileno():
-                    line = process.stdout.readline()
-                    if line:
-                        line = line.strip()
-                        logger.info(f"Standard output: {line}")
-                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                elif fd == process.stderr.fileno():
-                    line = process.stderr.readline()
-                    if line:
-                        line = line.strip()
-                        if '%' in line or 'it/s' in line:
-                            logger.info(f"Progress output: {line}")
-                            yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                        else:
-                            logger.error(f"Error output: {line}")
-                            yield f"data: {json.dumps({'error': line})}\n\n"
+            # 读取输出
+            line = process.stderr.readline()
+            if line:
+                line = line.strip()
+                if '%' in line or 'it/s' in line:
+                    yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': line})}\n\n"
             
+            # 如果进程结束
             if return_code is not None:
-                # 读取任何剩余的输出
-                for line in process.stdout:
-                    if line:
-                        line = line.strip()
-                        logger.info(f"Final stdout: {line}")
-                        yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                
-                for line in process.stderr:
-                    if line:
-                        line = line.strip()
-                        if '%' in line or 'it/s' in line:
-                            logger.info(f"Final progress: {line}")
-                            yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
-                        else:
-                            logger.error(f"Final error: {line}")
-                            yield f"data: {json.dumps({'error': line})}\n\n"
-                
                 if return_code != 0:
                     yield f"data: {json.dumps({'error': '翻译过程出错'})}\n\n"
                 else:
-                    # 等待一会儿确保文件写入完成
+                    # 检查输出文件
+                    base_name = Path(filename).stem
+                    mono_file = f"{base_name}-mono.pdf"
+                    dual_file = f"{base_name}-dual.pdf"
+                    
+                    # 等待文件生成
                     time.sleep(1)
                     
-                    # 查找翻译后的文件
-                    original_file = app.config.get(f'original_file_{task_id}')
-                    if original_file:
-                        base_name = Path(original_file).stem
-                        mono_file = f"{base_name}-mono.pdf"
-                        dual_file = f"{base_name}-dual.pdf"
-                        
-                        # 等待文件出现，最多等待5秒
-                        for _ in range(5):
-                            mono_exists = (Path('./pdf2zh') / mono_file).exists()
-                            dual_exists = (Path('./pdf2zh') / dual_file).exists()
-                            
-                            if mono_exists or dual_exists:
-                                files = {
-                                    'mono': {
-                                        'name': mono_file,
-                                        'exists': mono_exists,
-                                        'description': '单语翻译版本'
-                                    },
-                                    'dual': {
-                                        'name': dual_file,
-                                        'exists': dual_exists,
-                                        'description': '双语对照版本'
-                                    }
-                                }
-                                yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
-                                break
-                            time.sleep(1)
-                        else:
-                            yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
+                    mono_exists = (pdf_dir / mono_file).exists()
+                    dual_exists = (pdf_dir / dual_file).exists()
+                    
+                    if mono_exists or dual_exists:
+                        files = {
+                            'mono': {
+                                'name': mono_file,
+                                'exists': mono_exists,
+                                'description': '单语翻译版本'
+                            },
+                            'dual': {
+                                'name': dual_file,
+                                'exists': dual_exists,
+                                'description': '双语对照版本'
+                            }
+                        }
+                        yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'error': '未找到翻译后的文件'})}\n\n"
                 break
             
             time.sleep(0.1)
-            
+        
         # 清理
-        poll.unregister(process.stdout.fileno())
-        poll.unregister(process.stderr.fileno())
         del app.config[f'process_{task_id}']
-        if f'original_file_{task_id}' in app.config:
-            del app.config[f'original_file_{task_id}']
         
     return Response(generate(), mimetype='text/event-stream')
 
@@ -1330,7 +1273,7 @@ def convert_to_docx(filename):
         logger.error(f"Error in convert_to_docx: {str(e)}")
         return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
-=======
->>>>>>> parent of 69a48b4 (Translate)
+
+
 if __name__ == '__main__':
     app.run(debug=True) 
