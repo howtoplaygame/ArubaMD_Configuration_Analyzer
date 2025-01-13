@@ -20,10 +20,14 @@ from werkzeug.utils import secure_filename
 import select  # 添加这个导入
 import psutil
 
+# 设置环境变量
+os.environ['OPENAI_BASE_URL'] = 'http://10.0.69.88:3000/v1'
+os.environ['OPENAI_API_KEY'] = 'sk-5BNIoIraUDdFxu9m3b394e9394284eAfB0C437E2E59eD2Fa'
+os.environ['DEEPLX_ENDPOINT'] = 'http://10.0.69.88:1188/translate'
 
 app = Flask(__name__)
 # 设置最大文件大小为1MB
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 # 创建日志目录
 log_dir = os.path.join(os.path.dirname(__file__), 'log')
@@ -40,6 +44,12 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# 记录环境变量
+logger.info("Environment Variables:")
+logger.info(f"OPENAI_BASE_URL: {os.environ.get('OPENAI_BASE_URL', 'Not Set')}")
+logger.info(f"OPENAI_API_KEY: {'*' * len(os.environ.get('OPENAI_API_KEY', ''))} (Length: {len(os.environ.get('OPENAI_API_KEY', ''))})")
+logger.info(f"DEEPLX_ENDPOINT: {os.environ.get('DEEPLX_ENDPOINT', 'Not Set')}")
 
 # 确保data目录存在
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
@@ -1474,6 +1484,11 @@ def convert_to_docx(filename):
         docx_path = pdf_dir / filename.replace('.pdf', '.docx')
         
         # 执行转换命令
+
+        logging.info(f"OPENAI_BASE_URL: {os.environ['OPENAI_BASE_URL']}")
+        logging.info(f"OPENAI_API_KEY: {os.environ['OPENAI_API_KEY']}")
+        logging.info(f"DEEPLX_ENDPOINT: {os.environ['DEEPLX_ENDPOINT']}")
+              
         cmd = ['pdf2docx', 'convert', str(pdf_path), str(docx_path)]
         process = subprocess.run(cmd, capture_output=True, text=True)
         

@@ -263,7 +263,8 @@
                             <label>翻译服务：</label>
                             <select name="service">
                                 <option value="google" selected>Google</option>
-                                <option value="openai">OpenAI</option>
+                                <option value="openai:lucasllm">OpenAI</option>
+                                <option value="deeplx">Deeplx</option>
                             </select>
                         </div>
                     </div>
@@ -300,13 +301,13 @@
                 <div class="form-row">
                     <div class="form-col">
                         <div class="form-group">
-                            <label>字体异常：</label>
+                            <label>字体例外：</label>
                             <input type="text" name="fontExceptions" placeholder='例如："(MS.*)"'>
                         </div>
                     </div>
                     <div class="form-col">
                         <div class="form-group">
-                            <label>字符串异常：</label>
+                            <label>字符串例外：</label>
                             <input type="text" name="stringExceptions" placeholder='例如："(MS.*)"'>
                         </div>
                     </div>
@@ -348,6 +349,10 @@
         // 处理表单提交
         document.getElementById('translateForm').addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // 保存文件名供后续使用
+            const fileInput = this.querySelector('input[type="file"]');
+            const file = fileInput.files[0];
             
             const progress = document.getElementById('progress');
             const progressText = document.getElementById('progressText');
@@ -414,6 +419,21 @@
                         
                         let html = '<div class="download-section">';
                         html += '<div class="file-info">翻译完成，可下载以下文件：</div>';
+                        
+                        // 原始文件下载和转换
+                        html += `
+                            <div class="download-item">
+                                <div class="file-name">${file.name}</div>
+                                <div class="action-buttons">
+                                    <a href="/download/${file.name}" class="download-button">
+                                        下载原始文件
+                                    </a>
+                                    <button onclick="convertToDocx(this, '${file.name}')" class="convert-button">
+                                        转换为DOCX
+                                    </button>
+                                </div>
+                            </div>
+                        `;
                         
                         // 单语版本下载
                         if (data.files.mono.exists) {
