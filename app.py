@@ -1287,7 +1287,27 @@ def stream_progress(task_id):
                                 yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
                                 if '100%' in line:
                                     progress_100_seen = True
-                            else:
+                                    time.sleep(2)
+                                    mono_exists = mono_file.exists()
+                                    dual_exists = dual_file.exists()
+                                    
+                                    if mono_exists or dual_exists:
+                                        logger.info(f"Task {task_id} completed, files found: mono={mono_exists}, dual={dual_exists}")
+                                        files = {
+                                            'mono': {
+                                                'name': f"{base_name}-mono.pdf",
+                                                'exists': mono_exists,
+                                                'description': '单语翻译版本'
+                                            },
+                                            'dual': {
+                                                'name': f"{base_name}-dual.pdf",
+                                                'exists': dual_exists,
+                                                'description': '双语对照版本'
+                                            }
+                                        }
+                                        yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
+                                        return
+                            elif line.strip():  # 只处理非空行且不包含进度信息的行
                                 logger.debug(f"Task {task_id} output: {line}")
                                 yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
                     
@@ -1342,9 +1362,7 @@ def stream_progress(task_id):
                                         yield f"data: {json.dumps({'progress': line, 'refresh': True})}\n\n"
                                         if '100%' in line:
                                             progress_100_seen = True
-                                            # 看到100%后等待一会儿，让文件写入完成
                                             time.sleep(2)
-                                            # 检查文件是否生成
                                             mono_exists = mono_file.exists()
                                             dual_exists = dual_file.exists()
                                             
@@ -1365,8 +1383,10 @@ def stream_progress(task_id):
                                                 yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
                                                 return
                                         else:
-                                            logger.debug(f"Task {task_id} output: {line}")
-                                            yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
+                                            # 只有非进度信息才输出为普通消息
+                                            if not any(x in line for x in ['%', 'it/s']):
+                                                logger.debug(f"Task {task_id} output: {line}")
+                                                yield f"data: {json.dumps({'progress': line, 'refresh': False})}\n\n"
                     except Exception as e:
                         logger.error(f"Error reading progress: {str(e)}")
                     
