@@ -973,6 +973,11 @@ def load_config():
 def chat():
     return render_template('chat.html')
 
+# 添加新的lucas路由
+@app.route('/lucas')
+def lucas():
+    return render_template('lucas.html')
+
 # 新增配置分析API路由 - 重命名为analyze_config_chat以避免冲突
 @app.route('/analyze_config_chat', methods=['POST'])
 def analyze_config_chat():
