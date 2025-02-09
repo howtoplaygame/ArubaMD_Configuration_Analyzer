@@ -3,7 +3,7 @@ backup/
 data/
 log/
 pdf2zh/
-template/counters
+templates/counters
 tasks/
 .DS_Store
 
