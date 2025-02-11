@@ -104,9 +104,20 @@
             </div>
         </div>
         <div class="iframe-container">
+            <div id="welcome-message" style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                text-align: center;
+                color: #666;
+            ">
+                <h2>欢迎使用AI助手</h2>
+                <p>请在上方选择要使用的助手类型</p>
+            </div>
             <iframe
                 id="chatFrame"
-                src="http://10.0.69.88:8980/chat/share?shared_id=ced4bccee81f11ef82920242ac190006&from=chat&auth=RlN2E2ZGZjZTgyNTExZWZhZWY5MDI0Mm"
+                style="display: none;"
                 allow="microphone">
             </iframe>
         </div>
@@ -114,8 +125,15 @@
 
     <script>
         function changeIframe(src) {
+            const iframe = document.getElementById('chatFrame');
+            const welcomeMessage = document.getElementById('welcome-message');
+            
+            // 显示iframe，隐藏欢迎信息
+            iframe.style.display = 'block';
+            welcomeMessage.style.display = 'none';
+            
             // 更新iframe源
-            document.getElementById('chatFrame').src = src;
+            iframe.src = src;
             
             // 更新按钮状态
             const buttons = document.querySelectorAll('.option-btn');
