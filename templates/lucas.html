@@ -9,6 +9,7 @@
             padding: 0;
             height: 100vh;
             overflow: hidden;
+            font-family: Arial, sans-serif;
         }
         .nav {
             background-color: #16a085;
@@ -25,22 +26,57 @@
         }
         .container {
             display: flex;
-            height: calc(100vh - 56px); /* 减去导航栏的高度 */
+            flex-direction: column;
+            height: calc(100vh - 56px);
             width: 100%;
+            background-color: #f5f5f5;
         }
-        .left-panel, .right-panel {
+        .options-panel {
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .option-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .option-btn {
+            padding: 10px 20px;
+            background-color: #16a085;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            min-width: 120px;
+        }
+        .option-btn:hover {
+            background-color: #138a72;
+        }
+        .option-btn.active {
+            background-color: #138a72;
+            box-shadow: 0 0 0 2px white, 0 0 0 4px #16a085;
+        }
+        .iframe-container {
             flex: 1;
-            height: 100%;
-            border-right: 1px solid #ddd;
-        }
-        .right-panel {
-            border-right: none;
+            position: relative;
+            overflow: hidden;
         }
         iframe {
-            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            min-height: 700px;
+            border: none;
+        }
+        .description {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            color: #666;
         }
     </style>
 </head>
@@ -51,20 +87,55 @@
         <a href="/lucas">Lucas Chat</a>
     </div>
     <div class="container">
-        <div class="left-panel">
-            <iframe
-                src="https://chat.aruba.us.kg/chatbot/jYTTpxSmjLu6iAWX"
-                frameborder="0"
-                allow="microphone">
-            </iframe>
+        <div class="options-panel">
+            <div class="option-buttons">
+                <button class="option-btn active" onclick="changeIframe('http://219.143.145.100:65431/chat/share?shared_id=ced4bccee81f11ef82920242ac190006&from=chat&auth=RlN2E2ZGZjZTgyNTExZWZhZWY5MDI0Mm')">
+                    IAP助手
+                </button>
+                <button class="option-btn" onclick="changeIframe('http://219.143.145.100:65431/chat/share?shared_id=39be0fcce75311efbf600242ac190006&from=chat&auth=RlN2E2ZGZjZTgyNTExZWZhZWY5MDI0Mm')">
+                    AOS8助手
+                </button>
+                <button class="option-btn" onclick="changeIframe('http://114.94.108.82:65431/chatbot/l4mneiuKshVWk2R0')">
+                    Deepseek-R1
+                </button>
+            </div>
+            <div class="description" id="description">
+                当前模式：IAP助手 - 专注于IAP配置分析的AI助手
+            </div>
         </div>
-        <div class="right-panel">
+        <div class="iframe-container">
             <iframe
-                src="https://chat.aruba.us.kg/chatbot/5vLFqU8HwFSACeUF"
-                frameborder="0"
+                id="chatFrame"
+                src="http://10.0.69.88:8980/chat/share?shared_id=ced4bccee81f11ef82920242ac190006&from=chat&auth=RlN2E2ZGZjZTgyNTExZWZhZWY5MDI0Mm"
                 allow="microphone">
             </iframe>
         </div>
     </div>
+
+    <script>
+        function changeIframe(src) {
+            // 更新iframe源
+            document.getElementById('chatFrame').src = src;
+            
+            // 更新按钮状态
+            const buttons = document.querySelectorAll('.option-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if(btn.onclick.toString().includes(src)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // 更新描述
+            const description = document.getElementById('description');
+            if(src.includes('ced4bcce')) {
+                description.textContent = '当前模式：IAP助手 - 专注于IAP配置分析的AI助手';
+            } else if(src.includes('39be0fcc')) {
+                description.textContent = '当前模式：AOS8助手 - 专注于AOS8配置分析的AI助手';
+            } else if(src.includes('l4mneiuKshVWk2R0')) {
+                description.textContent = '当前模式：Deepseek-R1 - 基于Deepseek的AI助手';
+            }
+        }
+    </script>
 </body>
 </html> 
