@@ -13,8 +13,8 @@
         }
         .nav {
             background-color: #16a085;
-            padding: 1rem;
-            margin-bottom: 20px;
+            padding: 0.5rem 1rem;
+            margin-bottom: 10px;
         }
         .nav a {
             color: white;
@@ -33,7 +33,7 @@
             background-color: white;
             border: 1px solid #ddd;
             border-radius: 8px;
-            padding: 20px;
+            padding: 15px;
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
@@ -45,7 +45,7 @@
         }
         textarea {
             width: 100%;
-            min-height: 200px;
+            min-height: 150px;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -54,15 +54,15 @@
             font-size: 14px;
         }
         .submit-btn {
-            padding: 12px 24px;
+            padding: 8px 16px;
             background-color: #16a085;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             transition: background-color 0.3s;
-            min-width: 120px;
+            min-width: 100px;
         }
         .submit-btn:hover {
             background-color: #138a72;
@@ -72,45 +72,56 @@
             cursor: not-allowed;
         }
         .response-area {
-            margin-top: 20px;
-            padding: 15px;
+            margin-top: 10px;
+            padding: 12px;
             background-color: #f8f9fa;
             border-radius: 4px;
             white-space: pre-wrap;
             border: 1px solid #e9ecef;
+            max-height: 550px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            font-size: 14px;
         }
         .loading {
             text-align: center;
-            padding: 20px;
+            padding: 10px;
             display: none;
             color: #666;
+            font-size: 0.9em;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            margin-top: 10px;
         }
         .error {
             color: #721c24;
             background-color: #f8d7da;
-            padding: 15px;
+            padding: 10px;
             border-radius: 4px;
             margin-top: 10px;
             display: none;
             border: 1px solid #f5c6cb;
+            font-size: 0.9em;
         }
         .page-title {
             color: #2c3e50;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            font-size: 1.5em;
         }
         .tips {
             background-color: #fff3cd;
             border: 1px solid #ffeeba;
-            padding: 15px;
+            padding: 8px 15px;
             border-radius: 4px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             color: #856404;
+            font-size: 0.9em;
         }
         .char-counter {
             text-align: right;
             color: #666;
-            font-size: 0.9em;
-            margin-bottom: 5px;
+            font-size: 0.8em;
+            margin-bottom: 3px;
         }
         
         .char-counter.limit {
@@ -118,10 +129,10 @@
         }
         
         .response-area .heading {
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: bold;
             color: #2c3e50;
-            margin: 15px 0 10px 0;
+            margin: 10px 0 5px 0;
         }
         
         .response-area .highlight {
@@ -129,14 +140,14 @@
             font-weight: bold;
         }
         .clear-btn {
-            padding: 2px 8px;
+            padding: 2px 6px;
             background-color: #dc3545;
             color: white;
             border: none;
             border-radius: 3px;
             cursor: pointer;
             font-size: 12px;
-            margin-left: 10px;
+            margin-left: 5px;
         }
         
         .clear-btn:hover {
@@ -145,15 +156,15 @@
         .model-selector {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 5px;
         }
         
         .model-select {
-            padding: 8px 12px;
+            padding: 6px 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
-            width: 200px;
+            width: 180px;
             background-color: white;
         }
         
@@ -170,9 +181,9 @@
         .action-row {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
-            margin-top: 10px;
-            gap: 20px;
+            justify-content: space-between;
+            margin-top: 5px;
+            gap: 10px;
         }
     </style>
 </head>
@@ -184,7 +195,7 @@
     <div class="container">
         <h1 class="page-title">Aruba配置分析助手</h1>
         <div class="tips">
-            提示：请输入需要分析的Aruba配置内容，仅支持部分配置片段，不超过1000字符。AI将帮助您分析配置的合理性并提供建议。
+            请输入需要分析的Aruba配置内容（不超过1000字符）。AI将帮助您分析配置的合理性并提供建议。
         </div>
         <div class="chat-box">
             <div class="input-area">
@@ -198,7 +209,7 @@
                           onkeyup="updateCharCount(this)"></textarea>
                 <div class="action-row">
                     <div class="model-selector">
-                        <label for="modelSelect">选择模型：</label>
+                        <label for="modelSelect">模型：</label>
                         <select id="modelSelect" class="model-select">
                             <!-- 将由JavaScript动态填充 -->
                         </select>
@@ -246,17 +257,17 @@
             error.style.display = 'none';
             response.textContent = '';
 
-            try {
-                const requestData = {
-                    config: configInput.value,
-                    model: modelSelect.value
-                };
-                
-                // 记录请求数据
-                console.log('Request payload:', JSON.stringify(requestData, null, 2));
-                console.log('Request timestamp:', new Date().toISOString());
-                const startTime = performance.now();
+            // 创建 EventSource 用于接收流式响应
+            const requestData = {
+                config: configInput.value,
+                model: modelSelect.value
+            };
 
+            try {
+                const response_text = document.createElement('div');
+                response.appendChild(response_text);
+                
+                // 使用 fetch 发送 POST 请求
                 const res = await fetch('/analyze_config_chat', {
                     method: 'POST',
                     headers: {
@@ -265,31 +276,52 @@
                     body: JSON.stringify(requestData)
                 });
 
-                const endTime = performance.now();
-                console.log('Response timestamp:', new Date().toISOString());
-                console.log('Request duration:', (endTime - startTime).toFixed(2), 'ms');
-                console.log('Response status:', res.status);
-                console.log('Response headers:', Object.fromEntries([...res.headers]));
-                
-                if (!res.ok) {
-                    throw new Error(`Network response was not ok: ${res.status} ${res.statusText}`);
-                }
+                // 获取响应的 ReadableStream
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
 
-                const data = await res.json();
-                console.log('Response data:', JSON.stringify(data, null, 2));
-                
-                if (data.error) {
-                    throw new Error(data.error);
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+                    
+                    // 解码并处理数据
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    
+                    // 处理除最后一行外的所有行（最后一行可能不完整）
+                    buffer = lines.pop();
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.error) {
+                                    throw new Error(data.error);
+                                } else if (data.content) {
+                                    response_text.innerHTML = formatResponse(response_text.innerHTML + data.content);
+                                    // 自动滚动到底部
+                                    const responseArea = document.getElementById('response');
+                                    responseArea.scrollTop = responseArea.scrollHeight;
+                                } else if (data.done) {
+                                    console.log('Stream complete');
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
                 }
-
-                // 显示响应
-                response.innerHTML = formatResponse(data.analysis);
+                
             } catch (err) {
                 console.error('Error details:', {
                     name: err.name,
                     message: err.message,
                     stack: err.stack
                 });
+                
+                error.textContent = err.message || '当前服务不可用，请稍后再试';
                 error.style.display = 'block';
             } finally {
                 loading.style.display = 'none';

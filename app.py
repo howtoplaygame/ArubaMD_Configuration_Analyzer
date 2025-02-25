@@ -1056,30 +1056,31 @@ def analyze_config_chat():
         logger.info(json.dumps(messages, ensure_ascii=False, indent=2))
         logger.info("-"*30)
 
-        try:
-            # 使用OpenAI客户端发送请求
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=messages,
-                timeout=timeout_value,
-                temperature=0.7,
-                max_tokens=4096,
-            )
-            
-            # 记录API响应
-            logger.info("API Response received")
-            logger.info("-"*30)
-            logger.info(str(response))
-            logger.info("-"*30)
-            
-            # 获取AI响应内容
-            ai_response = response.choices[0].message.content
-            
-            return jsonify({'analysis': ai_response})
-
-        except Exception as e:
-            logger.error(f"API request error: {str(e)}", exc_info=True)
-            return jsonify({'error': '服务暂时不可用'}), 503
+        def generate():
+            try:
+                # 使用OpenAI客户端发送流式请求
+                response = client.chat.completions.create(
+                    model=model_id,
+                    messages=messages,
+                    timeout=timeout_value,
+                    temperature=0.7,
+                    max_tokens=4096,
+                    stream=True  # 启用流式输出
+                )
+                
+                for chunk in response:
+                    # 检查chunk.choices是否为空列表
+                    if chunk.choices and len(chunk.choices) > 0:
+                        if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                            yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+                
+                yield "data: {\"done\": true}\n\n"
+                
+            except Exception as e:
+                logger.error(f"API request error: {str(e)}", exc_info=True)
+                yield f"data: {json.dumps({'error': '服务暂时不可用'})}\n\n"
+        
+        return Response(generate(), mimetype='text/event-stream')
 
     except Exception as e:
         logger.error(f"Global error: {str(e)}", exc_info=True)
