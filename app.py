@@ -999,7 +999,7 @@ def analyze_config_chat():
         model_id = data.get('model', config.get('default_model'))
         
         # 根据model设置timeout
-        timeout_value = (30, 120) if model_id == 'lucastest' else 30
+        timeout_value = (300, 600) if model_id == 'lucastest' else 300
         logger.info(f"Using model: {model_id}, timeout: {timeout_value}")
 
         if not config_text:
