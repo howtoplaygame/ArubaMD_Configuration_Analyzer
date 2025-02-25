@@ -1,6 +1,6 @@
 {
     "api_key": "sk-a59c4awNSyG7u4aM3f37A8699b5841De9b179d0f902c6c92",
-    "base_url": "http://10.0.69.88:3000",
+    "base_url": "http://10.0.69.88:3000/v1",
     "models": [
         {
             "id": "lucasllm",
@@ -8,38 +8,12 @@
             "description": "默认模型"
         },
         {
-            "id": "gpt-4o-mini",
-            "name": "gpt-4o-mini",
-            "description": "功能最强大的模型"
-        },
-        {
-            "id": "gpt-3.5-turbo",
-            "name": "GPT-3.5-Turbo",
-            "description": "均衡的模型"
-        },
-        {
-            "id": "generalv3.5",
-            "name": "讯飞generalv3.5"
-        },
-        {
-            "id": "deepseek-chat",
-            "name": "DeepSeek"
-        },
-        {
-            "id": "glm-4-plus",
-            "name": "智谱glm-4-plus"
-        },
-        {
-            "id": "Baichuan2-Turbo",
-            "name": "百川2-Turbo"
-        },
-        {
-            "id": "gemini-pro",
-            "name": "Gemini-pro"
-        },
-        {
             "id": "lucastest",
-            "name": "Lucas Test"
+            "name": "Lucas Test",
+        },
+        {
+            "id": "lucastest1",
+            "name": "Lucas Test1"
         }
     ],
     "default_model": "lucasllm"

@@ -19,6 +19,7 @@ from pathlib import Path
 from werkzeug.utils import secure_filename
 import select  # 添加这个导入
 import psutil
+from openai import OpenAI
 
 # 设置环境变量
 os.environ['OPENAI_BASE_URL'] = 'http://10.0.69.88:3000/v1'
@@ -1040,44 +1041,39 @@ def analyze_config_chat():
                 }
             ]
 
-        # 准备API请求
-        api_url = f"{config['base_url']}/v1/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['api_key']}"
-        }
-        
-        payload = {
-            "model": model_id,  # 使用选择的模型
-            "messages": messages
-        }
+        # 准备OpenAI客户端
+        client = OpenAI(
+            base_url=config['base_url'],
+            api_key=config['api_key']
+        )
 
         # 记录API请求详情
-        logger.info("Sending API request:")
-        logger.info(f"URL: {api_url}")
-        logger.info("Payload:")
+        logger.info("Preparing API request:")
+        logger.info(f"Base URL: {config['base_url']}")
+        logger.info(f"Timeout: {timeout_value}")
+        logger.info("Messages:")
         logger.info("-"*30)
-        logger.info(json.dumps(payload, ensure_ascii=False, indent=2))
+        logger.info(json.dumps(messages, ensure_ascii=False, indent=2))
         logger.info("-"*30)
 
         try:
-            response = requests.post(
-                api_url,
-                headers=headers,
-                json=payload,
-                timeout=timeout_value  # 使用动态的timeout值
+            # 使用OpenAI客户端发送请求
+            response = client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                timeout=timeout_value,
+                temperature=0.7,
+                max_tokens=4096,
             )
             
             # 记录API响应
-            logger.info("API Response:")
-            logger.info(f"Status Code: {response.status_code}")
+            logger.info("API Response received")
             logger.info("-"*30)
-            logger.info(json.dumps(response.json(), ensure_ascii=False, indent=2))
+            logger.info(str(response))
             logger.info("-"*30)
             
-            response.raise_for_status()
-            result = response.json()
-            ai_response = result['choices'][0]['message']['content']
+            # 获取AI响应内容
+            ai_response = response.choices[0].message.content
             
             return jsonify({'analysis': ai_response})
 
