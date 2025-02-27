@@ -1071,8 +1071,17 @@ def analyze_config_chat():
                 for chunk in response:
                     # 检查chunk.choices是否为空列表
                     if chunk.choices and len(chunk.choices) > 0:
-                        if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
-                            yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+                        delta = chunk.choices[0].delta
+                        
+                        # 检查是否有reasoning_content（思考过程）
+                        if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                            logger.debug(f"Found reasoning content: {delta.reasoning_content}")
+                            yield f"data: {json.dumps({'type': 'reasoning', 'content': delta.reasoning_content})}\n\n"
+                        
+                        # 检查常规content
+                        if hasattr(delta, 'content') and delta.content:
+                            logger.debug(f"Found content: {delta.content}")
+                            yield f"data: {json.dumps({'content': delta.content})}\n\n"
                 
                 yield "data: {\"done\": true}\n\n"
                 
