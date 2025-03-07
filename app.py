@@ -1068,6 +1068,10 @@ def analyze_config_chat():
                     stream=True  # 启用流式输出
                 )
                 
+                # 用于收集完整内容的变量
+                full_reasoning_content = []
+                full_content = []
+                
                 for chunk in response:
                     # 检查chunk.choices是否为空列表
                     if chunk.choices and len(chunk.choices) > 0:
@@ -1075,13 +1079,26 @@ def analyze_config_chat():
                         
                         # 检查是否有reasoning_content（思考过程）
                         if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                            logger.debug(f"Found reasoning content: {delta.reasoning_content}")
+                            full_reasoning_content.append(delta.reasoning_content)
                             yield f"data: {json.dumps({'type': 'reasoning', 'content': delta.reasoning_content})}\n\n"
                         
                         # 检查常规content
                         if hasattr(delta, 'content') and delta.content:
-                            logger.debug(f"Found content: {delta.content}")
+                            full_content.append(delta.content)
                             yield f"data: {json.dumps({'content': delta.content})}\n\n"
+                
+                # 在流式输出结束后，输出完整的日志
+                if full_reasoning_content:
+                    logger.info("完整的思考过程内容:")
+                    logger.info("-"*30)
+                    logger.info("".join(full_reasoning_content))
+                    logger.info("-"*30)
+                
+                if full_content:
+                    logger.info("完整的输出内容:")
+                    logger.info("-"*30)
+                    logger.info("".join(full_content))
+                    logger.info("-"*30)
                 
                 yield "data: {\"done\": true}\n\n"
                 
@@ -1455,7 +1472,6 @@ def stream_progress(task_id):
                                     }
                                 }
                                 yield f"data: {json.dumps({'complete': True, 'files': files})}\n\n"
-                                return
                             else:
                                 logger.error(f"Process died, saw 100% but no files found for task {task_id}")
                                 yield f"data: {json.dumps({'error': '翻译完成但未找到输出文件'})}\n\n"
